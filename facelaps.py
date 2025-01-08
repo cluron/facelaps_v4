@@ -11,6 +11,23 @@ import threading
 import time
 import os
 import sys
+import argparse
+
+def sysArgs():
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest='action')
+
+    # ... (autres parsers)
+
+    # Parser pour make-video
+    parser_video = subparsers.add_parser('make-video')
+    parser_video.add_argument('-i', '--input', required=True, help='Input directory with validated faces')
+    parser_video.add_argument('-o', '--outV', required=True, help='Output directory for video')
+    parser_video.add_argument('-f', '--fps', type=int, required=True, help='Frames per second')
+    parser_video.add_argument('-m', '--morph-strength', type=float, default=0.5,
+                            help='Morphing strength between 0 (crossfade) and 1 (full morphing). Default: 0.5')
+
+    return vars(parser.parse_args())
 
 class LoadingAnimationManager:
     def __init__(self):
@@ -73,9 +90,10 @@ if __name__ == "__main__":
             DIR_extracted = args['input']
             DIR_video_output = args['outV']
             frame_per_second = args['fps']
+            morph_strength = args['morph_strength']
             print(f"{bcolors.JUST}\n[Arguments for {args['action']} mode are valid and stored]{bcolors.RESET}")
             print(f"{bcolors.JUST}\n[Starting video creation]{bcolors.RESET}")
-            create_video(DIR_extracted, DIR_video_output, version, frame_per_second)
+            create_video(DIR_extracted, DIR_video_output, version, frame_per_second, morph_strength)
 
         elif args['action'] == "concatenate-videos":
             # Mode concaténation de vidéos

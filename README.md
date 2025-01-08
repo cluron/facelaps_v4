@@ -46,7 +46,16 @@ Le traitement des visages suit un ordre précis pour garantir un alignement corr
 ./facelaps.py extract -t template_photos -s input -r rejected -op validated
 
 # Création d'une vidéo
-./facelaps.py make-video -i validated -o video -f 7
+./facelaps.py make-video -i validated -o video -f 7 [-m 0.5]
+
+Options pour make-video:
+  -i, --input : Dossier contenant les visages validés
+  -o, --outV  : Dossier de sortie pour la vidéo
+  -f, --fps   : Images par seconde (ex: 7 pour 7 images/sec)
+  -m, --morph-strength : Force du morphing entre les images (optionnel)
+    - 0.0 : Transition par fondu enchaîné simple
+    - 0.5 : Mélange équilibré entre morphing et fondu (défaut)
+    - 1.0 : Morphing complet entre les visages
 
 # Concaténation de vidéos
 ./facelaps.py concatenate-videos -s video
