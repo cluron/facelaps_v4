@@ -33,7 +33,7 @@ class BatchVerifier:
         cell_w, cell_h = self.cell_size
         
         # Augmenter la hauteur du bandeau pour avoir 8 lignes de texte
-        self.header_height = 250  # Augmenté de 220 à 250 pour avoir plus d'espace
+        self.header_height = 250  # Augmenté pour ajouter les 3 lignes de légende
         
         # Créer la grille avec l'en-tête
         grid = np.zeros((cell_h * rows + self.header_height, cell_w * cols, 3), dtype=np.uint8)
@@ -43,6 +43,10 @@ class BatchVerifier:
         validate_width = 150
         nav_start_x = 20
         
+        # Calculer le nombre total de pages en fonction du nombre actuel d'images
+        total_pages = max(1, (len(self.images) + (rows * cols - 1)) // (rows * cols))
+        current_page = min(self.current_batch + 1, total_pages)  # S'assurer que la page courante ne dépasse pas le total
+        
         # Boutons de navigation
         cv.rectangle(grid, (nav_start_x, 10), (nav_start_x + nav_width, 40), 
                     (70, 70, 70) if self.current_batch > 0 else (40, 40, 40), -1)
@@ -51,7 +55,7 @@ class BatchVerifier:
                   (255, 255, 255) if self.current_batch > 0 else (128, 128, 128), 2)
         
         # Compteur de pages
-        counter_text = f"Page {self.current_batch + 1}/{len(self.images) // (rows * cols) + 1}"
+        counter_text = f"Page {current_page}/{total_pages}"
         counter_x = nav_start_x + nav_width + 20
         cv.putText(grid, counter_text, (counter_x, 30),
                   cv.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
@@ -59,10 +63,10 @@ class BatchVerifier:
         # Bouton Suivant
         next_x = counter_x + 100
         cv.rectangle(grid, (next_x, 10), (next_x + nav_width, 40), 
-                    (70, 70, 70) if self.current_batch + 1 < (len(self.images) + (rows * cols - 1)) // (rows * cols) else (40, 40, 40), -1)
+                    (70, 70, 70) if current_page < total_pages else (40, 40, 40), -1)
         cv.putText(grid, ">", (next_x + 15, 30),
                   cv.FONT_HERSHEY_SIMPLEX, 0.7, 
-                  (255, 255, 255) if self.current_batch + 1 < (len(self.images) + (rows * cols - 1)) // (rows * cols) else (128, 128, 128), 2)
+                  (255, 255, 255) if current_page < total_pages else (128, 128, 128), 2)
         
         # Boutons alignés à droite
         quit_x = cell_w * cols - nav_width - 10

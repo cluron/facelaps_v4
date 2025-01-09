@@ -1,7 +1,8 @@
 import cv2 as cv
 import os
 from moviepy.editor import VideoFileClip, concatenate_videoclips
-from config import bcolors
+from config import (bcolors, min_morph_strength, max_morph_strength, 
+                   similarity_threshold)
 import logging
 import sys
 import mediapipe as mp
@@ -148,7 +149,37 @@ def create_morphing_transition(img1, img2, nb_frames, strength=0.5):
     
     return frames
 
-def create_video(folder_in, folder_out, version, frame_per_second, morph_strength=0.5):
+def calculate_image_similarity(img1, img2):
+    """Calcule la similarité entre deux images"""
+    # Redimensionner les images pour accélérer la comparaison
+    size = (100, 100)
+    img1_small = cv.resize(img1, size)
+    img2_small = cv.resize(img2, size)
+    
+    # Convertir en niveaux de gris
+    gray1 = cv.cvtColor(img1_small, cv.COLOR_BGR2GRAY)
+    gray2 = cv.cvtColor(img2_small, cv.COLOR_BGR2GRAY)
+    
+    # Calculer la similarité structurelle (SSIM)
+    score = cv.matchTemplate(gray1, gray2, cv.TM_CCOEFF_NORMED)[0][0]
+    
+    return max(0, min(1, (score + 1) / 2))  # Normaliser entre 0 et 1
+
+def get_adaptive_strength(img1, img2, base_strength, min_strength=min_morph_strength, 
+                         max_strength=max_morph_strength, threshold=similarity_threshold):
+    """Calcule la force de transition adaptative"""
+    similarity = calculate_image_similarity(img1, img2)
+    
+    if similarity >= threshold:
+        # Images très similaires -> transition douce
+        return min_strength
+    else:
+        # Adapter la force en fonction de la différence
+        strength_range = max_strength - min_strength
+        similarity_factor = (threshold - similarity) / threshold
+        return min_strength + (strength_range * similarity_factor)
+
+def create_video(folder_in, folder_out, version, frame_per_second, morph_strength=0.5, use_adaptive=False):
     """Crée une vidéo à partir des images"""
     # Créer le dossier de sortie s'il n'existe pas
     if not os.path.exists(folder_out):
@@ -220,37 +251,56 @@ def create_video(folder_in, folder_out, version, frame_per_second, morph_strengt
     total_images = len(files_sorted)
     
     # Utiliser tqdm de manière plus simple
-    for idx, image in enumerate(tqdm(files_sorted, desc="Creating video"), 1):
-        # Mettre à jour la description avec le progrès actuel
-        tqdm.write(f"\rProcessing {idx}/{total_images} images...", end='')
+    for idx, image in enumerate(tqdm(files_sorted[:-1], desc="Creating video"), 1):
+        path_current = os.path.join(folder_in, image)
+        path_next = os.path.join(folder_in, files_sorted[idx])
         
-        path = os.path.join(folder_in, image)
-        curr_img = cv.imread(path)
-        if curr_img is None:
-            tqdm.write(f"\nSkipping invalid image: {path}")
+        curr_img = cv.imread(path_current)
+        next_img = cv.imread(path_next)
+        
+        if curr_img is None or next_img is None:
+            tqdm.write(f"\nSkipping invalid image pair: {path_current} or {path_next}")
             continue
-        
+            
         if curr_img.shape[:2][::-1] != size:
             curr_img = cv.resize(curr_img, size)
+        if next_img.shape[:2][::-1] != size:
+            next_img = cv.resize(next_img, size)
         
         try:
-            if prev_img is not None:
-                # Utiliser le crossfade ou le morphing selon la force demandée
-                if morph_strength <= 0:
-                    transition = create_transition(prev_img, curr_img, transition_frames)
-                else:
-                    transition = create_morphing_transition(prev_img, curr_img, transition_frames, morph_strength)
-                for frame in transition:
-                    out.write(frame)
+            # Calculer la force de transition
+            current_strength = morph_strength
+            if use_adaptive:
+                current_strength = get_adaptive_strength(curr_img, next_img, morph_strength)
+                if current_strength != morph_strength:
+                    tqdm.write(f"\rTransition strength adjusted to {current_strength:.2f} "
+                             f"for images {idx}/{total_images}")
+            
+            # Créer la transition
+            if current_strength <= 0:
+                transition = create_transition(curr_img, next_img, transition_frames)
+            else:
+                transition = create_morphing_transition(curr_img, next_img, 
+                                                      transition_frames, current_strength)
+            
+            # Écrire les frames
+            for frame in transition:
+                out.write(frame)
             
             for _ in range(frames_per_image - transition_frames):
                 out.write(curr_img)
             
-            processed_count += 1
-            prev_img = curr_img.copy()
-            
         except Exception as e:
-            tqdm.write(f"\nError processing {image}: {str(e)}")
+            tqdm.write(f"\nError processing transition {idx}: {str(e)}")
+    
+    # Ajouter la dernière image
+    if files_sorted:
+        last_img = cv.imread(os.path.join(folder_in, files_sorted[-1]))
+        if last_img is not None:
+            if last_img.shape[:2][::-1] != size:
+                last_img = cv.resize(last_img, size)
+            for _ in range(frames_per_image):
+                out.write(last_img)
     
     out.release()
     print(f"\nProcessed {processed_count} images out of {total_images}")
@@ -262,16 +312,9 @@ def create_video(folder_in, folder_out, version, frame_per_second, morph_strengt
 
 def concatenate_videos(folder_in):
     """Concatène plusieurs vidéos"""
-    videos = []
-    path, dirs, files = next(os.walk(folder_in))
     # Ignorer les fichiers non-MP4
-    files = [f for f in files if f.endswith('.mp4')]
+    files = [f for f in os.listdir(folder_in) if f.endswith('.mp4')]
     total_videos = len(files)
-
-    # Créer le dossier de sortie s'il n'existe pas
-    if not os.path.exists(folder_in):
-        os.makedirs(folder_in)
-        logger.info(f"Created output directory: {folder_in}")
 
     logger.info(f"Found {total_videos} videos in {folder_in}")
 
@@ -279,36 +322,34 @@ def concatenate_videos(folder_in):
         logger.error("No valid videos found in the input folder")
         return
 
-    # Charger les vidéos
-    processed_count = 0
-    for vid in sorted(files):
-        path = os.path.join(folder_in, vid)
-        try:
-            video = VideoFileClip(path, audio=False)
-            videos.append(video)
-            processed_count += 1
-            logger.info(f"Loading video: {processed_count}/{total_videos}")
-        except Exception as e:
-            logger.warning(f"Failed to load video {vid}: {str(e)}")
-            continue
-
-    if not videos:
-        logger.error("No valid videos could be loaded")
+    # Obtenir les propriétés de la première vidéo
+    first_video = cv.VideoCapture(os.path.join(folder_in, files[0]))
+    if not first_video.isOpened():
+        logger.error("Could not open first video")
         return
 
-    logger.info("Starting video concatenation...")
-    
-    try:
-        final_clip = concatenate_videoclips(videos)
-        output_path = os.path.join(folder_in, "output_concatenation.mp4")
-        final_clip.write_videofile(output_path,
-                                 codec='libx264',
-                                 threads=8,
-                                 preset='faster',
-                                 remove_temp=True)
-        logger.info(f"Videos successfully concatenated: {output_path}")
-    except Exception as e:
-        logger.error(f"Error during concatenation: {str(e)}")
-    finally:
-        for video in videos:
-            video.close() 
+    frame_width = int(first_video.get(cv.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(first_video.get(cv.CAP_PROP_FRAME_HEIGHT))
+    fps = int(first_video.get(cv.CAP_PROP_FPS))
+    first_video.release()
+
+    # Créer le writer pour la vidéo de sortie
+    output_path = os.path.join(folder_in, "output_concatenation.mp4")
+    fourcc = cv.VideoWriter_fourcc(*'mp4v')
+    out = cv.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
+
+    # Concaténer les vidéos
+    for vid in sorted(files):
+        logger.info(f"Processing video: {vid}")
+        cap = cv.VideoCapture(os.path.join(folder_in, vid))
+        
+        while cap.isOpened():
+            ret, frame = cap.read()
+            if not ret:
+                break
+            out.write(frame)
+        
+        cap.release()
+
+    out.release()
+    logger.info(f"Videos successfully concatenated: {output_path}") 

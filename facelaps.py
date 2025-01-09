@@ -6,6 +6,7 @@ from config import version, model, sensibility, harmony_ratio, quality_check_sca
 from face_detection import extract_faces
 from video_processing import create_video, concatenate_videos
 from batch_verify import BatchVerifier
+from face_quality import FaceQualityAnalyzer
 
 # Autres imports standards
 import threading
@@ -13,6 +14,7 @@ import time
 import os
 import sys
 import argparse
+from pathlib import Path
 
 def sysArgs():
     parser = argparse.ArgumentParser(
@@ -21,16 +23,19 @@ def sysArgs():
         epilog="""
 Examples:
   # Extract faces from photos:
-  ./facelaps.py extract -t template_photos -s 1_input -r 2_rejected -op 3_validated
+  ./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated
 
   # Extract faces and verify them immediately:
-  ./facelaps.py extract -t template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 10x10
+  ./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 10x10
 
   # Verify faces in a grid interface:
   ./facelaps.py batch-verify -i 3_validated --grid 10x10
 
-  # Create a video from verified faces:
+  # Create a video with balanced transitions (50% morphing, 50% crossfade):
   ./facelaps.py make-video -i 3_validated -o 4_video -f 7 -m 0.5
+
+  # Create a video with smart transitions (auto-adjusts between morphing and crossfade):
+  ./facelaps.py make-video -i 3_validated -o 4_video -f 7 --adaptive
 
   # Concatenate multiple videos:
   ./facelaps.py concatenate-videos -s 4_video
@@ -46,23 +51,23 @@ Examples:
         epilog="""
 Examples:
   # Basic extraction:
-  ./facelaps.py extract -t template_photos -s 1_input -r 2_rejected -op 3_validated
+  ./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated
 
   # With immediate batch verification:
-  ./facelaps.py extract -t template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 10x10
+  ./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 10x10
 
   # With custom grid size:
-  ./facelaps.py extract -t template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 5x4
+  ./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 5x4
 
 Directory structure:
-  template_photos/  - Contains reference photos of the face to match
-  1_input/         - Contains all photos to process
-  2_rejected/      - Where non-matching photos will be moved
-  3_validated/     - Where extracted faces will be saved
-  4_video/         - Where generated videos will be saved
+  0_template_photos/  - Contains reference photos of the face to match
+  1_input/           - Contains all photos to process
+  2_rejected/        - Where non-matching photos will be moved
+  3_validated/       - Where extracted faces will be saved
+  4_video/          - Where generated videos will be saved
 """)
     parser_extract.add_argument('-t', '--template', required=True, 
-        help='Directory containing reference face photos (e.g., template_photos)')
+        help='Directory containing reference face photos (e.g., 0_template_photos)')
     parser_extract.add_argument('-s', '--source', required=True, 
         help='Directory containing photos to process (e.g., 1_input)')
     parser_extract.add_argument('-r', '--rejected', required=True, 
@@ -89,6 +94,11 @@ Examples:
 
   # Create video with crossfade only:
   ./facelaps.py make-video -i validated -o video -f 7 -m 0.0
+
+  # Create video with adaptive transitions:
+  ./facelaps.py make-video -i validated -o video -f 7 --adaptive
+
+Note: Adaptive transitions automatically adjust morphing strength based on image differences
 """)
     parser_video.add_argument('-i', '--input', required=True, 
         help='Directory containing validated face photos (e.g., 3_validated)')
@@ -97,7 +107,15 @@ Examples:
     parser_video.add_argument('-f', '--fps', type=int, required=True, 
         help='Frames per second (e.g., 7 for smooth transitions)')
     parser_video.add_argument('-m', '--morph-strength', type=float, default=0.5,
-        help='Morphing strength: 0.0 for crossfade, 1.0 for full morphing (default: 0.5)')
+        help='''Force des transitions :
+        0.0 : Uniquement du fondu enchaîné (crossfade)
+        0.5 : Mélange équilibré morphing/fondu (défaut)
+        1.0 : Uniquement du morphing''')
+    parser_video.add_argument('--adaptive', action='store_true',
+        help='''Active les transitions adaptatives :
+        - Utilise plus de fondu pour les images similaires
+        - Utilise plus de morphing pour les images différentes
+        - Ajuste automatiquement selon la différence entre les images''')
 
     # Parser pour batch-verify
     parser_verify = subparsers.add_parser('batch-verify',
@@ -202,6 +220,11 @@ if __name__ == "__main__":
 
             # Lancer la vérification par lots si demandé
             if args.get('batch_verify'):
+                print(f"{bcolors.JUST}\n[Analyzing face quality...]{bcolors.RESET}")
+                analyzer = FaceQualityAnalyzer(DIR_validated, DIR_rejected)
+                quality_report = analyzer.analyze_faces()
+                print(f"{bcolors.JUST}{quality_report}{bcolors.RESET}")
+                
                 print(f"{bcolors.JUST}\n[Starting batch verification]{bcolors.RESET}")
                 rows, cols = map(int, args['grid'].split('x'))
                 verifier = BatchVerifier(args['outP'], grid_size=(rows, cols))
@@ -213,9 +236,13 @@ if __name__ == "__main__":
             DIR_video_output = args['outV']
             frame_per_second = args['fps']
             morph_strength = args['morph_strength']
+            use_adaptive = args['adaptive']
             print(f"{bcolors.JUST}\n[Arguments for {args['action']} mode are valid and stored]{bcolors.RESET}")
+            if use_adaptive:
+                print(f"{bcolors.JUST}[Using adaptive transitions]{bcolors.RESET}")
             print(f"{bcolors.JUST}\n[Starting video creation]{bcolors.RESET}")
-            create_video(DIR_extracted, DIR_video_output, version, frame_per_second, morph_strength)
+            create_video(DIR_extracted, DIR_video_output, version, frame_per_second, 
+                        morph_strength, use_adaptive=use_adaptive)
 
         elif args['action'] == "concatenate-videos":
             # Mode concaténation de vidéos
@@ -225,6 +252,13 @@ if __name__ == "__main__":
             concatenate_videos(DIR_videos_folder)
 
         elif args['action'] == "batch-verify":
+            # Analyser la qualité avant de lancer la vérification
+            print(f"{bcolors.JUST}\n[Analyzing face quality...]{bcolors.RESET}")
+            analyzer = FaceQualityAnalyzer(args['input'], Path(args['input']).parent / "2_rejected")
+            quality_report = analyzer.analyze_faces()
+            print(f"{bcolors.JUST}{quality_report}{bcolors.RESET}")
+            print(f"{bcolors.JUST}\n[Preparing grid interface...]{bcolors.RESET}")
+            
             rows, cols = map(int, args['grid'].split('x'))
             verifier = BatchVerifier(args['input'], grid_size=(rows, cols))
             print(f"{bcolors.JUST}\n[Starting batch verification]{bcolors.RESET}")

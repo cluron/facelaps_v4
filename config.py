@@ -13,6 +13,12 @@ croping_size_x = 1100
 croping_size_y = 1000
 border_addition = 2000
 
+# Variables de transition adaptative
+adaptive_transition = True  # Active les transitions adaptatives
+min_morph_strength = 0.2   # Plus de fondu enchaîné, pour images similaires
+max_morph_strength = 1.0   # Plus de morphing, pour images différentes
+similarity_threshold = 0.6  # Seuil pour décider du type de transition
+
 # Variables techniques
-version = "2.2-arm"
+version = "2.3-arm"
 max_faces = 5 

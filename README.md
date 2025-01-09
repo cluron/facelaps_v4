@@ -69,16 +69,36 @@ L'interface de vérification par lots offre :
 
 ### 3. Création de la vidéo
 ```bash
+# Vidéo avec transitions standards
 ./facelaps.py make-video -i 3_validated -o 4_video -f 7 -m 0.5
+
+# Vidéo avec uniquement du fondu enchaîné
+./facelaps.py make-video -i 3_validated -o 4_video -f 7 -m 0.0
+
+# Vidéo avec uniquement du morphing
+./facelaps.py make-video -i 3_validated -o 4_video -f 7 -m 1.0
+
+# Vidéo avec transitions adaptatives
+./facelaps.py make-video -i 3_validated -o 4_video -f 7 --adaptive
 ```
 Options :
 - `-i` : Dossier contenant les visages validés
 - `-o` : Dossier de sortie pour la vidéo
 - `-f` : Images par seconde (ex: 7 pour 7 images/sec)
-- `-m` : Force du morphing entre les images
-  - 0.0 : Transition par fondu enchaîné simple
-  - 0.5 : Mélange équilibré entre morphing et fondu (défaut)
-  - 1.0 : Morphing complet entre les visages
+- `-m` : Type de transition entre les images
+  - 0.0 : Uniquement du fondu enchaîné (crossfade)
+    - Simple superposition progressive des images
+    - Transition douce mais peut être floue
+  - 0.5 : Mélange équilibré morphing/fondu (défaut)
+    - Bon compromis pour la plupart des cas
+  - 1.0 : Uniquement du morphing
+    - Déformation progressive des traits du visage
+    - Plus fluide mais peut créer des artefacts
+- `--adaptive` : Active les transitions adaptatives
+  - Analyse la différence entre chaque paire d'images
+  - Utilise plus de fondu pour les images similaires
+  - Utilise plus de morphing pour les images différentes
+  - Optimise automatiquement chaque transition
 
 ### 4. Concaténation de vidéos
 ```bash
