@@ -1,5 +1,19 @@
+# Dossiers de données
+template_photos/
+1_input/
+2_rejected/
+3_validated/
+4_video/
+
+# Python
 __pycache__/
-*.pyc
-.DS_Store
+*.py[cod]
+*$py.class
+.env
 venv/
-*.log
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
