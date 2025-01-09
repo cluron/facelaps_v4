@@ -6,7 +6,7 @@ Un outil pour créer des timelapse de visages à partir d'une série de photos.
 
 - Détection et extraction automatique des visages
 - Alignement intelligent des visages basé sur les points de repère
-- Vérification par lots avec interface graphique
+- Vérification par lots avec interface graphique et analyse de qualité
 - Création de vidéos avec transitions fluides
 - Concaténation de plusieurs vidéos
 
@@ -31,23 +31,16 @@ Les paramètres peuvent être ajustés dans `config.py` :
 ### 1. Extraction des visages
 ```bash
 # Extraction simple
-./facelaps.py extract -t template_photos -s 1_input -r 2_rejected -op 3_validated
+./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated
 
 # Extraction suivie de vérification par lots (grid par défaut 10x10)
-./facelaps.py extract -t template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify
+./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify
 
 # Extraction avec vérification par lots et grid personnalisée
-./facelaps.py extract -t template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 5x4
+./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 5x4
 ```
-Options :
-- `-t` : Dossier contenant les photos de référence
-- `-s` : Dossier contenant les photos à traiter
-- `-r` : Dossier pour les photos rejetées
-- `-op` : Dossier pour les visages validés
-- `--batch-verify` : Lance la vérification par lots après l'extraction
-- `--grid` : Taille de la grille pour la vérification (défaut: 10x10)
 
-### 2. Vérification par lots (optionnel)
+### 2. Vérification par lots
 ```bash
 # Avec la grid par défaut (10x10)
 ./facelaps.py batch-verify -i 3_validated
@@ -55,16 +48,24 @@ Options :
 # Avec une grid personnalisée
 ./facelaps.py batch-verify -i 3_validated --grid 5x4
 ```
-Interface graphique permettant de :
-- Visualiser plusieurs visages simultanément
-- Marquer/démarquer les visages à supprimer par simple clic
-- Naviguer entre les pages avec les flèches < et >
-- Voir la progression (Page X/Y)
-- Supprimer les visages marqués en un clic
 
-Options :
-- `-i` : Dossier contenant les visages à vérifier
-- `--grid` : Taille de la grille (défaut: 10x10)
+L'interface de vérification par lots offre :
+
+- **Analyse de qualité automatique**
+  - Score de qualité pour chaque image (0-100%)
+  - Classification par niveau :
+    - Vert : Bonne qualité (≥ 75%)
+    - Jaune : Qualité acceptable (60-74%)
+    - Rouge : Qualité médiocre (< 60%)
+  - Tri automatique (moins bonnes images en premier)
+
+- **Interface intuitive**
+  - Navigation par pages avec compteur
+  - Clic simple pour marquer/démarquer une image
+  - Visualisation en grand avec Espace
+  - Retour à la grille avec Espace/Échap/q
+  - Bouton "Supprimer" pour valider les rejets
+  - Quitter avec le bouton X, Échap ou q
 
 ### 3. Création de la vidéo
 ```bash
@@ -74,12 +75,12 @@ Options :
 - `-i` : Dossier contenant les visages validés
 - `-o` : Dossier de sortie pour la vidéo
 - `-f` : Images par seconde (ex: 7 pour 7 images/sec)
-- `-m` : Force du morphing entre les images (optionnel)
+- `-m` : Force du morphing entre les images
   - 0.0 : Transition par fondu enchaîné simple
   - 0.5 : Mélange équilibré entre morphing et fondu (défaut)
   - 1.0 : Morphing complet entre les visages
 
-### 4. Concaténation de vidéos (optionnel)
+### 4. Concaténation de vidéos
 ```bash
 ./facelaps.py concatenate-videos -s 4_video
 ```
@@ -88,8 +89,8 @@ Options :
 ## Workflow recommandé
 
 1. **Préparation** :
-   - Placer les photos de référence dans le dossier template_photos
-   - Placer les photos à traiter dans le dossier 1_input
+   - Placer les photos de référence dans `0_template_photos`
+   - Placer les photos à traiter dans `1_input`
 
 2. **Traitement** :
    - Extraire les visages avec `extract`
@@ -101,22 +102,12 @@ Options :
 
 ```
 project/
-├── template_photos/    # Photos de référence
+├── 0_template_photos/  # Photos de référence
 ├── 1_input/           # Photos à traiter
 ├── 2_rejected/        # Photos rejetées
 ├── 3_validated/       # Visages extraits et validés
 └── 4_video/          # Vidéos générées
 ```
-
-## Dépendances
-
-- OpenCV
-- NumPy
-- MediaPipe
-
-## Licence
-
-Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.
 
 ## Installation
 
@@ -148,5 +139,15 @@ venv\Scripts\activate     # Windows
 
 4. Créer la structure des dossiers :
 ```bash
-mkdir template_photos 1_input 2_rejected 3_validated 4_video
+mkdir 0_template_photos 1_input 2_rejected 3_validated 4_video
 ```
+
+## Dépendances
+
+- OpenCV
+- NumPy
+- MediaPipe
+
+## Licence
+
+Ce projet est sous licence MIT. Voir le fichier LICENSE pour plus de détails.

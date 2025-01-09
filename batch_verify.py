@@ -1,6 +1,8 @@
 import cv2 as cv
 import numpy as np
 from pathlib import Path
+from face_quality import FaceQualityAnalyzer
+from utils import bcolors
 
 class BatchVerifier:
     def __init__(self, input_dir, grid_size=(4, 4)):
@@ -11,89 +13,110 @@ class BatchVerifier:
         self.current_batch = 0
         self.marked_for_rejection = set()
         self.cell_size = (200, 200)
-        self.button_width = 200
-        self.header_height = 50
+        self.header_height = 80
+        self.selected_image = None  # Pour tracker l'image sélectionnée
+        
+        # Initialiser l'analyseur de qualité
+        self.analyzer = FaceQualityAnalyzer(self.input_dir, self.rejected_dir)
+        
+        # Trier les images par qualité
+        self.image_qualities = {}
+        for img_path in self.images:
+            quality = self.analyzer.get_image_quality(img_path)
+            self.image_qualities[img_path] = quality['score']
+        
+        # Trier les images par score de qualité (croissant)
+        self.images.sort(key=lambda x: self.image_qualities[x])
         
     def create_grid(self, images):
-        """Crée une grille d'images avec boutons"""
         rows, cols = self.grid_size
         cell_w, cell_h = self.cell_size
         
-        # Augmenter la hauteur du bandeau pour deux lignes
-        self.header_height = 80
+        # Augmenter la hauteur du bandeau pour avoir 8 lignes de texte
+        self.header_height = 250  # Augmenté de 220 à 250 pour avoir plus d'espace
         
         # Créer la grille avec l'en-tête
         grid = np.zeros((cell_h * rows + self.header_height, cell_w * cols, 3), dtype=np.uint8)
         
-        # Calculer le nombre total d'écrans
-        total_screens = (len(self.images) + (rows * cols - 1)) // (rows * cols)
-        current_screen = self.current_batch + 1
-        
-        # Première ligne : titre centré
-        instruction = "Cliquez sur les images a supprimer du timelapse"
-        instruction_size = cv.getTextSize(instruction, cv.FONT_HERSHEY_SIMPLEX, 0.7, 2)[0]
-        start_x = (cell_w * cols - instruction_size[0]) // 2
-        cv.putText(grid, instruction, (start_x, 25),
-                  cv.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        
-        # Deuxième ligne : navigation et boutons
+        # Première ligne : navigation et boutons (y = 35)
         nav_width = 40
         validate_width = 150
-        
-        # Zone de navigation (à gauche)
         nav_start_x = 20
         
-        # Bouton Précédent (toujours visible mais grisé si inactif)
-        cv.rectangle(grid, (nav_start_x, 40), (nav_start_x + nav_width, 70), 
+        # Boutons de navigation
+        cv.rectangle(grid, (nav_start_x, 10), (nav_start_x + nav_width, 40), 
                     (70, 70, 70) if self.current_batch > 0 else (40, 40, 40), -1)
-        cv.rectangle(grid, (nav_start_x, 40), (nav_start_x + nav_width, 70), 
-                    (100, 100, 100) if self.current_batch > 0 else (60, 60, 60), 2)
-        cv.putText(grid, "<", (nav_start_x + 15, 60),
+        cv.putText(grid, "<", (nav_start_x + 15, 30),
                   cv.FONT_HERSHEY_SIMPLEX, 0.7, 
                   (255, 255, 255) if self.current_batch > 0 else (128, 128, 128), 2)
         
-        # Compteur de pages (centré entre les boutons de navigation)
-        counter_text = f"Page {current_screen}/{total_screens}"
-        counter_size = cv.getTextSize(counter_text, cv.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+        # Compteur de pages
+        counter_text = f"Page {self.current_batch + 1}/{len(self.images) // (rows * cols) + 1}"
         counter_x = nav_start_x + nav_width + 20
-        cv.putText(grid, counter_text, (counter_x, 60),
+        cv.putText(grid, counter_text, (counter_x, 30),
                   cv.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
         
-        # Bouton Suivant (toujours visible mais grisé si inactif)
-        next_x = counter_x + counter_size[0] + 20
-        has_next = current_screen < total_screens
-        cv.rectangle(grid, (next_x, 40), (next_x + nav_width, 70), 
-                    (70, 70, 70) if has_next else (40, 40, 40), -1)
-        cv.rectangle(grid, (next_x, 40), (next_x + nav_width, 70), 
-                    (100, 100, 100) if has_next else (60, 60, 60), 2)
-        cv.putText(grid, ">", (next_x + 15, 60),
+        # Bouton Suivant
+        next_x = counter_x + 100
+        cv.rectangle(grid, (next_x, 10), (next_x + nav_width, 40), 
+                    (70, 70, 70) if self.current_batch + 1 < (len(self.images) + (rows * cols - 1)) // (rows * cols) else (40, 40, 40), -1)
+        cv.putText(grid, ">", (next_x + 15, 30),
                   cv.FONT_HERSHEY_SIMPLEX, 0.7, 
-                  (255, 255, 255) if has_next else (128, 128, 128), 2)
+                  (255, 255, 255) if self.current_batch + 1 < (len(self.images) + (rows * cols - 1)) // (rows * cols) else (128, 128, 128), 2)
         
-        # Boutons (alignés à droite)
+        # Boutons alignés à droite
         quit_x = cell_w * cols - nav_width - 10
         validate_x = quit_x - validate_width - 20
         
-        # Bouton Supprimer
-        cv.rectangle(grid, (validate_x, 40), (validate_x + validate_width, 70), 
+        cv.rectangle(grid, (validate_x, 10), (validate_x + validate_width, 40), 
                     (0, 0, 100), -1)
-        cv.rectangle(grid, (validate_x, 40), (validate_x + validate_width, 70), 
-                    (0, 0, 150), 2)
-        cv.putText(grid, "Supprimer", (validate_x + 30, 60),
+        cv.putText(grid, "Supprimer", (validate_x + 30, 30),
                   cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
         
-        # Bouton Quitter
-        cv.rectangle(grid, (quit_x, 40), (quit_x + nav_width, 70), 
+        cv.rectangle(grid, (quit_x, 10), (quit_x + nav_width, 40), 
                     (70, 70, 70), -1)
-        cv.rectangle(grid, (quit_x, 40), (quit_x + nav_width, 70), 
-                    (100, 100, 100), 2)
-        cv.putText(grid, "X", (quit_x + 13, 60),
+        cv.putText(grid, "X", (quit_x + 13, 30),
                   cv.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
         
-        # Séparateur entre les deux lignes
-        cv.line(grid, (0, 30), (cell_w * cols, 30), (100, 100, 100), 1)
+        # Ligne de séparation après les boutons
+        cv.line(grid, (0, 45), (cell_w * cols, 45), (100, 100, 100), 1)
         
-        # Séparateur final
+        # Messages alignés à gauche avec une ligne par message
+        margin_left = 20  # Marge gauche pour tous les messages
+        
+        # Deuxième ligne : titre principal (y = 70)
+        title = "Cliquer pour supprimer certaines images du timelapse"
+        cv.putText(grid, title, (margin_left, 70),
+                  cv.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+        
+        # Troisième ligne : instructions (y = 95)
+        instructions = "Clic : marquer/demarquer une image pour suppression"
+        cv.putText(grid, instructions, (margin_left, 95),
+                  cv.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+        
+        # Quatrième ligne : instructions supplémentaires (y = 120)
+        instructions2 = "Clic puis Espace : visualiser l'image en grand"
+        cv.putText(grid, instructions2, (margin_left, 120),
+                  cv.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+        
+        # Cinquième ligne : information sur la qualité (y = 145)
+        quality_note = "Les images sont triees par qualite (moins bonnes en premier)"
+        cv.putText(grid, quality_note, (margin_left, 145),
+                  cv.FONT_HERSHEY_SIMPLEX, 0.7, (200, 200, 200), 2)
+        
+        # Sixième ligne : légende qualité bonne (y = 170)
+        cv.putText(grid, "Vert : Bonne qualite (>= 75%)", (margin_left, 170),
+                  cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        
+        # Septième ligne : légende qualité acceptable (y = 195)
+        cv.putText(grid, "Jaune : Qualite acceptable (60-74%)", (margin_left, 195),
+                  cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+        
+        # Huitième ligne : légende qualité médiocre (y = 220)
+        cv.putText(grid, "Rouge : Qualite mediocre (< 60%)", (margin_left, 220),
+                  cv.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        
+        # Ligne de séparation finale
         cv.line(grid, (0, self.header_height-1), (cell_w * cols, self.header_height-1), 
                (100, 100, 100), 1)
         
@@ -122,6 +145,22 @@ class BatchVerifier:
                 cv.rectangle(overlay, (0, 0), (cell_w, cell_h), (0, 0, 255), -1)
                 cv.addWeighted(overlay, 0.3, img, 0.7, 0, img)
                 grid[y:y+cell_h, x:x+cell_w] = img
+            
+            # Afficher uniquement le score avec la couleur appropriée
+            quality = self.image_qualities[img_path]
+            score_text = f"{quality:.0f}%"
+            
+            if quality >= 75:
+                color = (0, 255, 0)  # Vert pour "Bonne"
+            elif quality >= 60:
+                color = (0, 255, 255)  # Jaune pour "Acceptable"
+            else:
+                color = (0, 0, 255)  # Rouge pour "Médiocre"
+            
+            cv.putText(grid, score_text, (x+10, y+25),
+                      cv.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+            
+            # Suppression de l'affichage des problèmes sur les miniatures
         
         return grid
 
@@ -131,54 +170,43 @@ class BatchVerifier:
             cell_w, cell_h = self.cell_size
             rows, cols = self.grid_size
             
-            if y < self.header_height:  # Clics dans le bandeau
+            # Ajuster la zone de clic des boutons pour qu'elle soit plus large
+            if y <= 45:  # Zone des boutons (augmentée)
                 nav_width = 40
                 validate_width = 150
+                nav_start_x = 20
+                counter_x = nav_start_x + nav_width + 20
+                next_x = counter_x + 100
                 
-                # Vérifier les clics uniquement sur la deuxième ligne (y > 30)
-                if 40 <= y <= 70:
-                    # Zone de navigation (à gauche)
-                    nav_start_x = 20
-                    counter_text = f"Page {self.current_batch + 1}/{(len(self.images) + (rows * cols - 1)) // (rows * cols)}"
-                    counter_size = cv.getTextSize(counter_text, cv.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
-                    counter_x = nav_start_x + nav_width + 20
-                    next_x = counter_x + counter_size[0] + 20
-                    
-                    # Clic sur Précédent
-                    if nav_start_x <= x <= nav_start_x + nav_width and self.current_batch > 0:
-                        self.current_batch -= 1
-                        self.navigation_clicked = True
+                # Boutons de droite
+                quit_x = cell_w * cols - nav_width - 10
+                validate_x = quit_x - validate_width - 20
+                
+                # Clic sur Précédent (zone plus large)
+                if 0 <= x <= nav_start_x + nav_width + 10 and self.current_batch > 0:
+                    self.current_batch -= 1
+                    self.navigation_clicked = True
+                    self.save_and_continue = True
+                # Clic sur Suivant (zone plus large)
+                elif next_x - 10 <= x <= next_x + nav_width + 10 and self.current_batch + 1 < (len(self.images) + (rows * cols - 1)) // (rows * cols):
+                    self.current_batch += 1
+                    self.navigation_clicked = True
+                    self.save_and_continue = True
+                # Clic sur Supprimer (zone plus large)
+                elif validate_x - 10 <= x <= validate_x + validate_width + 10:
+                    if self.marked_for_rejection:
+                        print("\nDéplacement des images marquées...")
+                        self.save_changes()
+                        self.save_and_continue = False
+                        start_idx = self.current_batch * (rows * cols)
+                        self.current_batch_images = self.images[start_idx:start_idx + (rows * cols)]
+                        grid = self.create_grid(self.current_batch_images)
+                        cv.imshow('Batch Verify', grid)
+                    else:
                         self.save_and_continue = True
-                    # Clic sur Suivant
-                    elif next_x <= x <= next_x + nav_width and self.current_batch + 1 < (len(self.images) + (rows * cols - 1)) // (rows * cols):
-                        self.current_batch += 1
-                        self.navigation_clicked = True
-                        self.save_and_continue = True
-                    
-                    # Boutons de droite
-                    quit_x = cell_w * cols - nav_width - 10
-                    validate_x = quit_x - validate_width - 20
-                    
-                    # Clic sur Supprimer
-                    if validate_x <= x <= validate_x + validate_width:
-                        if self.marked_for_rejection:
-                            print("\nDéplacement des images marquées...")
-                            self.save_changes()
-                            # Rester sur la même grille après suppression
-                            # pour voir les nouvelles images qui ont "glissé"
-                            self.save_and_continue = False
-                            # Forcer le rafraîchissement de l'affichage
-                            start_idx = self.current_batch * (rows * cols)
-                            self.current_batch_images = self.images[start_idx:start_idx + (rows * cols)]
-                            grid = self.create_grid(self.current_batch_images)
-                            cv.imshow('Batch Verify', grid)
-                        else:
-                            # S'il n'y a pas d'images à supprimer, passer à la grille suivante
-                            self.save_and_continue = True
-                    # Clic sur Quitter
-                    elif quit_x <= x <= quit_x + nav_width:
-                        self.quit = True
-                    return
+                # Clic sur Quitter (zone plus large)
+                elif quit_x - 10 <= x <= quit_x + nav_width + 20:
+                    self.quit = True
             else:  # Clics sur les images
                 y_adjusted = y - self.header_height
                 col = x // cell_w
@@ -187,6 +215,8 @@ class BatchVerifier:
                 if row < rows and col < cols:
                     idx = row * cols + col
                     if idx < len(self.current_batch_images):
+                        # Stocker uniquement la dernière image sélectionnée
+                        self.selected_image = self.current_batch_images[idx]
                         # Calculer l'index global
                         global_idx = self.current_batch * (rows * cols) + idx
                         
@@ -206,7 +236,7 @@ class BatchVerifier:
         print("Instructions:")
         print("- Cliquez sur les images à rejeter")
         print("- Cliquez sur 'Supprimer' pour confirmer")
-        print("- Cliquez sur 'Quitter' pour terminer\n")
+        print("- Cliquez sur 'Quitter' ou 'q' pour terminer\n")
         
         cv.namedWindow('Batch Verify', cv.WINDOW_NORMAL)
         cv.setMouseCallback('Batch Verify', self.handle_click)
@@ -226,9 +256,45 @@ class BatchVerifier:
             cv.imshow('Batch Verify', grid)
             
             while not (self.save_and_continue or self.quit or self.navigation_clicked):
-                if cv.waitKey(1) & 0xFF == 27:
+                key = cv.waitKey(1) & 0xFF
+                if key == 27 or key == ord('q'):  # Échap ou 'q'
                     self.quit = True
                     break
+                elif key == 32 and self.selected_image:  # Espace
+                    # Afficher l'image en grand dans la même fenêtre
+                    img = cv.imread(str(self.selected_image))
+                    if img is not None:
+                        # Obtenir les dimensions de l'écran
+                        screen_w = cv.getWindowImageRect('Batch Verify')[2]
+                        screen_h = cv.getWindowImageRect('Batch Verify')[3]
+                        
+                        # Redimensionner l'image pour qu'elle tienne dans l'écran
+                        h, w = img.shape[:2]
+                        ratio = min(screen_w/w, screen_h/h) * 0.8
+                        new_size = (int(w*ratio), int(h*ratio))
+                        img_resized = cv.resize(img, new_size)
+                        
+                        # Afficher les problèmes de qualité
+                        if self.selected_image in self.image_qualities:
+                            quality = self.image_qualities[self.selected_image]
+                            if quality < 60:
+                                quality_info = self.analyzer.get_image_quality(self.selected_image)
+                                issues_text = f"Qualité: {quality:.0f}% - " + ", ".join(quality_info['issues'])
+                                cv.putText(img_resized, issues_text, (10, 30),
+                                         cv.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                        
+                        # Afficher dans la même fenêtre
+                        cv.imshow('Batch Verify', img_resized)
+                        
+                        # Attendre la touche espace pour revenir à la grille
+                        while True:
+                            k = cv.waitKey(1) & 0xFF
+                            if k == 32 or k == 27 or k == ord('q'):  # Espace, Échap ou 'q' pour revenir
+                                break
+                        
+                        # Revenir à la grille
+                        grid = self.create_grid(self.current_batch_images)
+                        cv.imshow('Batch Verify', grid)
             
             if self.quit:
                 break

@@ -14,5 +14,5 @@ croping_size_y = 1000
 border_addition = 2000
 
 # Variables techniques
-version = "v0.15-arm"
+version = "2.2-arm"
 max_faces = 5 
