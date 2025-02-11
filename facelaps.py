@@ -14,146 +14,169 @@ import time
 import os
 import sys
 import argparse
+import logging
 from pathlib import Path
 
+# Configuration du logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
+
 def sysArgs():
+    class ColoredHelpFormatter(argparse.HelpFormatter):
+        def __init__(self, prog, indent_increment=2, max_help_position=30, width=None):
+            super().__init__(prog, indent_increment, max_help_position, width)
+            self._program_name = prog
+
+        def _format_action(self, action):
+            # Colorer les options en cyan
+            result = super()._format_action(action)
+            if action.option_strings:
+                for opt in action.option_strings:
+                    result = result.replace(opt, f"{bcolors.JUST}{opt}{bcolors.RESET}")
+            return result
+
+        def _format_usage(self, usage, actions, groups, prefix):
+            # Colorer le mot "usage" en bleu
+            if prefix is None:
+                prefix = f"{bcolors.JUST}usage: {bcolors.RESET}"
+            return super()._format_usage(usage, actions, groups, prefix)
+
+        def _format_action_invocation(self, action):
+            # Colorer les métavariables en jaune
+            if not action.option_strings:
+                metavar, = self._metavar_formatter(action, action.dest)(1)
+                return f"{bcolors.WARNING}{metavar}{bcolors.RESET}"
+            else:
+                parts = []
+                for option_string in action.option_strings:
+                    parts.append(f"{bcolors.JUST}{option_string}{bcolors.RESET}")
+                if action.nargs != 0:
+                    default = action.dest.upper()
+                    args_string = self._format_args(action, default)
+                    parts[-1] += f" {bcolors.WARNING}{args_string}{bcolors.RESET}"
+                return ', '.join(parts)
+
     parser = argparse.ArgumentParser(
-        description='FaceLaps - Create timelapse videos from face photos',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
+        description=f'{bcolors.OK}FaceLaps - Create timelapse videos from face photos{bcolors.RESET}',
+        formatter_class=ColoredHelpFormatter,
+        epilog=f"""
+{bcolors.OK}Examples:{bcolors.RESET}
   # Extract faces from photos:
-  ./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated
+  {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated{bcolors.RESET}
 
   # Extract faces and verify them immediately:
-  ./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 10x10
+  {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 10x10{bcolors.RESET}
 
   # Verify faces in a grid interface:
-  ./facelaps.py batch-verify -i 3_validated --grid 10x10
+  {bcolors.JUST}./facelaps.py batch-verify -i 3_validated --grid 10x10{bcolors.RESET}
 
   # Create a video with balanced transitions (50% morphing, 50% crossfade):
-  ./facelaps.py make-video -i 3_validated -o 4_video -f 7 -m 0.5
+  {bcolors.JUST}./facelaps.py make-video -i 3_validated -o 4_video -f 7 -m 0.5{bcolors.RESET}
 
   # Create a video with smart transitions (auto-adjusts between morphing and crossfade):
-  ./facelaps.py make-video -i 3_validated -o 4_video -f 7 --adaptive
+  {bcolors.JUST}./facelaps.py make-video -i 3_validated -o 4_video -f 7 --adaptive{bcolors.RESET}
 
   # Concatenate multiple videos:
-  ./facelaps.py concatenate-videos -s 4_video
+  {bcolors.JUST}./facelaps.py concatenate-videos -s 4_video{bcolors.RESET}
 """)
     
-    subparsers = parser.add_subparsers(dest='action', help='Available commands')
+    subparsers = parser.add_subparsers(dest='action', help=f'{bcolors.OK}Available commands{bcolors.RESET}')
 
     # Parser pour extract
     parser_extract = subparsers.add_parser('extract', 
-        help='Extract and align faces from photos',
-        description='Extract, align and validate faces from a set of photos using template matching',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
+        help=f'{bcolors.OK}Extract and align faces from photos{bcolors.RESET}',
+        description=f'{bcolors.OK}Extract, align and validate faces from a set of photos using template matching{bcolors.RESET}',
+        formatter_class=ColoredHelpFormatter,
+        epilog=f"""
+{bcolors.OK}Examples:{bcolors.RESET}
   # Basic extraction:
-  ./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated
+  {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated{bcolors.RESET}
 
   # With immediate batch verification:
-  ./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 10x10
+  {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 10x10{bcolors.RESET}
 
   # With custom grid size:
-  ./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 5x4
+  {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 5x4{bcolors.RESET}
 
-Directory structure:
-  0_template_photos/  - Contains reference photos of the face to match
-  1_input/           - Contains all photos to process
-  2_rejected/        - Where non-matching photos will be moved
-  3_validated/       - Where extracted faces will be saved
-  4_video/          - Where generated videos will be saved
+{bcolors.OK}Directory structure:{bcolors.RESET}
+  {bcolors.JUST}0_template_photos/{bcolors.RESET}  - Contains reference photos of the face to match
+  {bcolors.JUST}1_input/{bcolors.RESET}           - Contains all photos to process
+  {bcolors.JUST}2_rejected/{bcolors.RESET}        - Where non-matching photos will be moved
+  {bcolors.JUST}3_validated/{bcolors.RESET}       - Where extracted faces will be saved
+  {bcolors.JUST}4_video/{bcolors.RESET}          - Where generated videos will be saved
 """)
     parser_extract.add_argument('-t', '--template', required=True, 
-        help='Directory containing reference face photos (e.g., 0_template_photos)')
+        help=f'{bcolors.OK}Directory containing reference face photos (e.g., 0_template_photos){bcolors.RESET}')
     parser_extract.add_argument('-s', '--source', required=True, 
-        help='Directory containing photos to process (e.g., 1_input)')
+        help=f'{bcolors.OK}Directory containing photos to process (e.g., 1_input){bcolors.RESET}')
     parser_extract.add_argument('-r', '--rejected', required=True, 
-        help='Directory where rejected photos will be moved (e.g., 2_rejected)')
+        help=f'{bcolors.OK}Directory where rejected photos will be moved (e.g., 2_rejected){bcolors.RESET}')
     parser_extract.add_argument('-op', '--outP', required=True, 
-        help='Directory where validated faces will be saved (e.g., 3_validated)')
+        help=f'{bcolors.OK}Directory where validated faces will be saved (e.g., 3_validated){bcolors.RESET}')
     parser_extract.add_argument('--batch-verify', action='store_true', 
-        help='Launch the batch verification interface after extraction')
+        help=f'{bcolors.OK}Launch the batch verification interface after extraction{bcolors.RESET}')
     parser_extract.add_argument('--grid', default='10x10', 
-        help='Grid size for batch verification (e.g., 10x10, 5x4)')
+        help=f'{bcolors.OK}Grid size for batch verification (e.g., 10x10, 5x4){bcolors.RESET}')
 
     # Parser pour make-video
     parser_video = subparsers.add_parser('make-video',
-        help='Create a video from validated faces',
-        description='Create a timelapse video from validated face photos with morphing transitions',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Create video with default morphing:
-  ./facelaps.py make-video -i validated -o video -f 7
+        help=f'{bcolors.OK}Create a video from validated faces{bcolors.RESET}',
+        description=f'{bcolors.OK}Create a timelapse video from validated face photos with crossfade transitions{bcolors.RESET}',
+        formatter_class=ColoredHelpFormatter,
+        epilog=f"""
+{bcolors.OK}Examples:{bcolors.RESET}
+  # Create video with default settings:
+  {bcolors.JUST}./facelaps.py make-video -i validated -o video -f 7{bcolors.RESET}
 
-  # Create video with custom morphing strength:
-  ./facelaps.py make-video -i validated -o video -f 7 -m 0.8
+  # Create video with custom fps:
+  {bcolors.JUST}./facelaps.py make-video -i validated -o video -f 10{bcolors.RESET}
 
-  # Create video with crossfade only:
-  ./facelaps.py make-video -i validated -o video -f 7 -m 0.0
-
-  # Create video with adaptive transitions:
-  ./facelaps.py make-video -i validated -o video -f 7 --adaptive
-
-Note: Adaptive transitions automatically adjust morphing strength based on image differences
+Note: All transitions use smooth crossfade for consistent results
 """)
     parser_video.add_argument('-i', '--input', required=True, 
-        help='Directory containing validated face photos (e.g., 3_validated)')
+        help=f'{bcolors.OK}Directory containing validated face photos (e.g., 3_validated){bcolors.RESET}')
     parser_video.add_argument('-o', '--outV', required=True, 
-        help='Output directory for the generated video (e.g., 4_video)')
+        help=f'{bcolors.OK}Output directory for the generated video (e.g., 4_video){bcolors.RESET}')
     parser_video.add_argument('-f', '--fps', type=int, required=True, 
-        help='Frames per second (e.g., 7 for smooth transitions)')
-    parser_video.add_argument('-m', '--morph-strength', type=float, default=0.5,
-        help='''Force des transitions :
-        0.0 : Uniquement du fondu enchaîné (crossfade)
-        0.5 : Mélange équilibré morphing/fondu (défaut)
-        1.0 : Uniquement du morphing''')
-    parser_video.add_argument('--adaptive', action='store_true',
-        help='''Active les transitions adaptatives :
-        - Utilise plus de fondu pour les images similaires
-        - Utilise plus de morphing pour les images différentes
-        - Ajuste automatiquement selon la différence entre les images''')
+        help=f'{bcolors.OK}Frames per second (e.g., 7 for smooth transitions){bcolors.RESET}')
 
     # Parser pour batch-verify
     parser_verify = subparsers.add_parser('batch-verify',
-        help='Visual interface to verify and remove faces',
-        description='Interactive grid interface to review and remove unwanted faces',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
+        help=f'{bcolors.OK}Visual interface to verify and remove faces{bcolors.RESET}',
+        description=f'{bcolors.OK}Interactive grid interface to review and remove unwanted faces{bcolors.RESET}',
+        formatter_class=ColoredHelpFormatter,
+        epilog=f"""
+{bcolors.OK}Examples:{bcolors.RESET}
   # Verify with default 10x10 grid:
-  ./facelaps.py batch-verify -i validated
+  {bcolors.JUST}./facelaps.py batch-verify -i validated{bcolors.RESET}
 
   # Verify with custom grid size:
-  ./facelaps.py batch-verify -i validated --grid 5x4
+  {bcolors.JUST}./facelaps.py batch-verify -i validated --grid 5x4{bcolors.RESET}
 
-Interface controls:
+{bcolors.OK}Interface controls:{bcolors.RESET}
   - Click on faces to mark/unmark them for deletion
   - Use arrow buttons to navigate between pages
   - Click "Supprimer" to confirm deletions
   - Click "X" to exit
 """)
     parser_verify.add_argument('-i', '--input', required=True, 
-        help='Directory containing faces to verify (e.g., 3_validated)')
+        help=f'{bcolors.OK}Directory containing faces to verify (e.g., 3_validated){bcolors.RESET}')
     parser_verify.add_argument('--grid', default='10x10', 
-        help='Grid size for the visual interface (e.g., 10x10, 5x4)')
+        help=f'{bcolors.OK}Grid size for the visual interface (e.g., 10x10, 5x4){bcolors.RESET}')
 
     # Parser pour concatenate-videos
     parser_concat = subparsers.add_parser('concatenate-videos',
-        help='Concatenate multiple videos',
-        description='Combine multiple timelapse videos into a single video',
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Example:
-  ./facelaps.py concatenate-videos -s video_folder
+        help=f'{bcolors.OK}Concatenate multiple videos{bcolors.RESET}',
+        description=f'{bcolors.OK}Combine multiple timelapse videos into a single video{bcolors.RESET}',
+        formatter_class=ColoredHelpFormatter,
+        epilog=f"""
+{bcolors.OK}Example:{bcolors.RESET}
+  {bcolors.JUST}./facelaps.py concatenate-videos -s video_folder{bcolors.RESET}
 
 Note: Videos will be concatenated in alphabetical order
 """)
     parser_concat.add_argument('-s', '--source', required=True, 
-        help='Directory containing videos to concatenate (e.g., 4_video)')
+        help=f'{bcolors.OK}Directory containing videos to concatenate (e.g., 4_video){bcolors.RESET}')
 
     args = parser.parse_args()
     if args.action is None:
@@ -178,15 +201,16 @@ class LoadingAnimationManager:
             self.thread.join()
 
 if __name__ == "__main__":
-    # Afficher la bannière
+    logger.debug("Starting program...")
     print_banner(version)
-    
-    # Récupérer et traiter les arguments
     args = sysArgs()
+    logger.debug(f"Command line arguments: {args}")
+    
     loading_manager = LoadingAnimationManager()
     
     try:        
         if args['action'] == "extract":
+            logger.debug("Starting face extraction...")
             # Afficher les paramètres uniquement pour le mode extract
             print(f"{bcolors.JUST}[Configuration Parameters]{bcolors.RESET}")
             print(f"Detection Model      : {model} ({'high accuracy' if model == 'full' else 'faster detection'})")
@@ -220,6 +244,7 @@ if __name__ == "__main__":
 
             # Lancer la vérification par lots si demandé
             if args.get('batch_verify'):
+                logger.debug("Starting batch verification...")
                 print(f"{bcolors.JUST}\n[Analyzing face quality...]{bcolors.RESET}")
                 analyzer = FaceQualityAnalyzer(DIR_validated, DIR_rejected)
                 quality_report = analyzer.analyze_faces()
@@ -227,24 +252,21 @@ if __name__ == "__main__":
                 
                 print(f"{bcolors.JUST}\n[Starting batch verification]{bcolors.RESET}")
                 rows, cols = map(int, args['grid'].split('x'))
-                verifier = BatchVerifier(args['outP'], grid_size=(rows, cols))
+                verifier = BatchVerifier(DIR_validated, grid_size=(rows, cols))
                 verifier.run()
 
         elif args['action'] == "make-video":
+            logger.debug("Starting video creation...")
             # Mode création de vidéo
             DIR_extracted = args['input']
             DIR_video_output = args['outV']
             frame_per_second = args['fps']
-            morph_strength = args['morph_strength']
-            use_adaptive = args['adaptive']
             print(f"{bcolors.JUST}\n[Arguments for {args['action']} mode are valid and stored]{bcolors.RESET}")
-            if use_adaptive:
-                print(f"{bcolors.JUST}[Using adaptive transitions]{bcolors.RESET}")
             print(f"{bcolors.JUST}\n[Starting video creation]{bcolors.RESET}")
-            create_video(DIR_extracted, DIR_video_output, version, frame_per_second, 
-                        morph_strength, use_adaptive=use_adaptive)
+            create_video(DIR_extracted, DIR_video_output, version, frame_per_second)
 
         elif args['action'] == "concatenate-videos":
+            logger.debug("Starting video concatenation...")
             # Mode concaténation de vidéos
             DIR_videos_folder = args['source']
             print(f"{bcolors.JUST}\n[Arguments for {args['action']} mode are valid and stored]{bcolors.RESET}")
@@ -252,6 +274,7 @@ if __name__ == "__main__":
             concatenate_videos(DIR_videos_folder)
 
         elif args['action'] == "batch-verify":
+            logger.debug("Starting batch verification...")
             # Analyser la qualité avant de lancer la vérification
             print(f"{bcolors.JUST}\n[Analyzing face quality...]{bcolors.RESET}")
             analyzer = FaceQualityAnalyzer(args['input'], Path(args['input']).parent / "2_rejected")
