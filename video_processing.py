@@ -1,17 +1,63 @@
-import cv2 as cv
 import os
-from moviepy.editor import VideoFileClip, concatenate_videoclips
+import sys
+import tempfile
+import fcntl
+
+# Redirection de stderr vers /dev/null
+devnull = open(os.devnull, 'w')
+stderr_fd = sys.stderr.fileno()
+# Sauvegarder une copie du stderr original
+stderr_save = os.dup(stderr_fd)
+# Rediriger stderr vers /dev/null
+os.dup2(devnull.fileno(), stderr_fd)
+
+# Configuration silencieuse avant tout import
+os.environ.update({
+    'TF_CPP_MIN_LOG_LEVEL': '3',
+    'MEDIAPIPE_DISABLE_GPU': '1',
+    'OPENCV_LOG_LEVEL': '3',
+    'AUTOGRAPH_VERBOSITY': '0',
+    'CPP_MIN_LOG_LEVEL': '3',
+    'TF_ENABLE_ONEDNN_OPTS': '0',
+    'CUDA_VISIBLE_DEVICES': '-1',
+    'TF_SILENCE_DEPRECATION_WARNINGS': '1',
+    'PYTHONWARNINGS': 'ignore',
+    'FORCE_MEDIAPIPE_CPU': '1'
+})
+
+# Supprimer tous les handlers existants
+import logging
+root = logging.getLogger()
+if root.handlers:
+    for handler in root.handlers:
+        root.removeHandler(handler)
+        
+# Configurer le logging de base
+logging.basicConfig(level=logging.ERROR)
+
+import cv2 as cv
 from config import (bcolors, min_morph_strength, max_morph_strength, 
                    similarity_threshold)
-import logging
-import sys
 import mediapipe as mp
 import numpy as np
 from tqdm import tqdm
 import time
 
-# Initialisation de MediaPipe
+# Désactiver tous les loggers après les imports
+logging.getLogger('tensorflow').setLevel(logging.ERROR)
+logging.getLogger('mediapipe').setLevel(logging.ERROR)
+logging.getLogger('absl').setLevel(logging.ERROR)
+logging.getLogger('matplotlib').setLevel(logging.ERROR)
+logging.getLogger('numba').setLevel(logging.ERROR)
+
+# Configuration de MediaPipe pour utiliser le CPU uniquement
+mp.solutions.face_mesh.FaceMesh._ENABLE_GPU = False
 mp_face_mesh = mp.solutions.face_mesh
+
+# Restaurer stderr pour nos propres messages
+os.dup2(stderr_save, stderr_fd)
+os.close(stderr_save)
+devnull.close()
 
 # Configuration du logger
 def setup_logger():
@@ -63,43 +109,58 @@ def create_transition(img1, img2, nb_frames):
 
 def get_face_landmarks(image):
     """Extrait les points caractéristiques du visage"""
-    with mp_face_mesh.FaceMesh(
-        static_image_mode=True,
-        max_num_faces=1,
-        min_detection_confidence=0.5) as face_mesh:
-        
-        results = face_mesh.process(cv.cvtColor(image, cv.COLOR_BGR2RGB))
-        if not results.multi_face_landmarks:
-            return None
-        
-        h, w = image.shape[:2]
-        landmarks = np.array([[int(lm.x * w), int(lm.y * h)] for lm in results.multi_face_landmarks[0].landmark])
-        return landmarks
+    # Rediriger stderr temporairement
+    old_stderr = sys.stderr
+    sys.stderr = open(os.devnull, 'w')
+    
+    try:
+        with mp_face_mesh.FaceMesh(
+            static_image_mode=True,
+            max_num_faces=1,
+            min_detection_confidence=0.5) as face_mesh:
+            
+            results = face_mesh.process(cv.cvtColor(image, cv.COLOR_BGR2RGB))
+            if not results.multi_face_landmarks:
+                return None
+            
+            h, w = image.shape[:2]
+            landmarks = np.array([[int(lm.x * w), int(lm.y * h)] for lm in results.multi_face_landmarks[0].landmark])
+            return landmarks
+    finally:
+        # Restaurer stderr
+        sys.stderr = old_stderr
 
 def create_morphing_transition(img1, img2, nb_frames, strength=0.5):
     """Crée une transition morphing entre deux images"""
-    landmarks1 = get_face_landmarks(img1)
-    landmarks2 = get_face_landmarks(img2)
-    
-    if landmarks1 is None or landmarks2 is None:
-        return create_transition(img1, img2, nb_frames)
-    
-    frames = []
-    h, w = img1.shape[:2]
-    
-    # Points clés du visage
-    key_points = [
-        33,   # Nez
-        133, 362,  # Yeux
-        61, 291,   # Bouche
-        152, 382,  # Sourcils
-        10, 152,   # Contour gauche
-        234, 454,  # Contour droit
-        0, 17,     # Menton
-        50, 280,   # Joues
-    ]
+    # Rediriger stderr temporairement
+    old_stderr = sys.stderr
+    null_fd = open(os.devnull, 'w')
+    sys.stderr = null_fd
     
     try:
+        landmarks1 = get_face_landmarks(img1)
+        landmarks2 = get_face_landmarks(img2)
+        
+        if landmarks1 is None or landmarks2 is None:
+            sys.stderr = old_stderr
+            null_fd.close()
+            return create_transition(img1, img2, nb_frames)
+        
+        frames = []
+        h, w = img1.shape[:2]
+        
+        # Points clés du visage
+        key_points = [
+            33,   # Nez
+            133, 362,  # Yeux
+            61, 291,   # Bouche
+            152, 382,  # Sourcils
+            10, 152,   # Contour gauche
+            234, 454,  # Contour droit
+            0, 17,     # Menton
+            50, 280,   # Joues
+        ]
+        
         # Extraire les points clés
         filtered_landmarks1 = landmarks1[key_points]
         filtered_landmarks2 = landmarks2[key_points]
@@ -142,12 +203,16 @@ def create_morphing_transition(img1, img2, nb_frames, strength=0.5):
             # Ajouter un peu de crossfade pour adoucir
             blended = cv.addWeighted(result, 1 - alpha, img2, alpha, 0)
             frames.append(blended)
+            
+        return frames
     
     except Exception as e:
         print(f"Error in morphing: {str(e)}")
         return create_transition(img1, img2, nb_frames)
-    
-    return frames
+    finally:
+        # Restaurer stderr
+        sys.stderr = old_stderr
+        null_fd.close()
 
 def calculate_image_similarity(img1, img2):
     """Calcule la similarité entre deux images"""
@@ -240,7 +305,6 @@ def create_video(folder_in, folder_out, version, frame_per_second, morph_strengt
 
     # Ajouter toutes les images valides
     processed_count = 0
-    prev_img = None
     
     # Calculer le nombre de frames à maintenir chaque image
     frames_per_image = int(video_fps / frame_per_second)
@@ -268,20 +332,8 @@ def create_video(folder_in, folder_out, version, frame_per_second, morph_strengt
             next_img = cv.resize(next_img, size)
         
         try:
-            # Calculer la force de transition
-            current_strength = morph_strength
-            if use_adaptive:
-                current_strength = get_adaptive_strength(curr_img, next_img, morph_strength)
-                if current_strength != morph_strength:
-                    tqdm.write(f"\rTransition strength adjusted to {current_strength:.2f} "
-                             f"for images {idx}/{total_images}")
-            
-            # Créer la transition
-            if current_strength <= 0:
-                transition = create_transition(curr_img, next_img, transition_frames)
-            else:
-                transition = create_morphing_transition(curr_img, next_img, 
-                                                      transition_frames, current_strength)
+            # Créer la transition (uniquement fondu enchaîné)
+            transition = create_transition(curr_img, next_img, transition_frames)
             
             # Écrire les frames
             for frame in transition:
@@ -289,6 +341,8 @@ def create_video(folder_in, folder_out, version, frame_per_second, morph_strengt
             
             for _ in range(frames_per_image - transition_frames):
                 out.write(curr_img)
+            
+            processed_count += 1
             
         except Exception as e:
             tqdm.write(f"\nError processing transition {idx}: {str(e)}")
@@ -301,6 +355,7 @@ def create_video(folder_in, folder_out, version, frame_per_second, morph_strengt
                 last_img = cv.resize(last_img, size)
             for _ in range(frames_per_image):
                 out.write(last_img)
+            processed_count += 1  # Compter la dernière image
     
     out.release()
     print(f"\nProcessed {processed_count} images out of {total_images}")

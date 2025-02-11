@@ -1,4 +1,4 @@
-# FaceLaps
+# FaceLaps v3.0
 
 Un outil pour créer des timelapse de visages à partir d'une série de photos.
 
@@ -7,7 +7,7 @@ Un outil pour créer des timelapse de visages à partir d'une série de photos.
 - Détection et extraction automatique des visages
 - Alignement intelligent des visages basé sur les points de repère
 - Vérification par lots avec interface graphique et analyse de qualité
-- Création de vidéos avec transitions fluides
+- Création de vidéos avec transitions adaptatives
 - Concaténation de plusieurs vidéos
 
 ## Configuration
@@ -33,7 +33,7 @@ Les paramètres peuvent être ajustés dans `config.py` :
 # Extraction simple
 ./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated
 
-# Extraction suivie de vérification par lots (grid par défaut 10x10)
+# Extraction avec vérification par lots (grid par défaut 10x10)
 ./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify
 
 # Extraction avec vérification par lots et grid personnalisée
@@ -70,30 +70,16 @@ L'interface de vérification par lots offre :
 ### 3. Création de la vidéo
 ```bash
 # Vidéo avec transitions standards
-./facelaps.py make-video -i 3_validated -o 4_video -f 7 -m 0.5
-
-# Vidéo avec uniquement du fondu enchaîné
-./facelaps.py make-video -i 3_validated -o 4_video -f 7 -m 0.0
-
-# Vidéo avec uniquement du morphing
-./facelaps.py make-video -i 3_validated -o 4_video -f 7 -m 1.0
+./facelaps.py make-video -i 3_validated -o 4_video -f 7
 
 # Vidéo avec transitions adaptatives
 ./facelaps.py make-video -i 3_validated -o 4_video -f 7 --adaptive
 ```
+
 Options :
 - `-i` : Dossier contenant les visages validés
 - `-o` : Dossier de sortie pour la vidéo
 - `-f` : Images par seconde (ex: 7 pour 7 images/sec)
-- `-m` : Type de transition entre les images
-  - 0.0 : Uniquement du fondu enchaîné (crossfade)
-    - Simple superposition progressive des images
-    - Transition douce mais peut être floue
-  - 0.5 : Mélange équilibré morphing/fondu (défaut)
-    - Bon compromis pour la plupart des cas
-  - 1.0 : Uniquement du morphing
-    - Déformation progressive des traits du visage
-    - Plus fluide mais peut créer des artefacts
 - `--adaptive` : Active les transitions adaptatives
   - Analyse la différence entre chaque paire d'images
   - Utilise plus de fondu pour les images similaires
@@ -105,18 +91,6 @@ Options :
 ./facelaps.py concatenate-videos -s 4_video
 ```
 - `-s` : Dossier contenant les vidéos à concaténer
-
-## Workflow recommandé
-
-1. **Préparation** :
-   - Placer les photos de référence dans `0_template_photos`
-   - Placer les photos à traiter dans `1_input`
-
-2. **Traitement** :
-   - Extraire les visages avec `extract`
-   - Vérifier et affiner la sélection avec `batch-verify`
-   - Créer la vidéo avec `make-video`
-   - Optionnellement, concaténer plusieurs vidéos avec `concatenate-videos`
 
 ## Structure des dossiers
 
@@ -137,36 +111,34 @@ git clone https://github.com/cluron/facelaps2.git
 cd facelaps2
 ```
 
-2. Créer un environnement virtuel (recommandé) :
+2. Créer et activer un environnement virtuel :
 ```bash
+# Sur macOS/Linux
+python3 -m venv venv
+source venv/bin/activate
+
+# Sur Windows
 python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# ou
-venv\Scripts\activate     # Windows
+venv\Scripts\activate
 ```
 
-3. Installation (choisir une méthode) :
-
-   a. Installation rapide des dépendances :
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-   b. Installation complète du package :
-   ```bash
-   pip install -e .
-   ```
+3. Installer les dépendances :
+```bash
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
 
 4. Créer la structure des dossiers :
 ```bash
-mkdir 0_template_photos 1_input 2_rejected 3_validated 4_video
+mkdir -p 0_template_photos 1_input 2_rejected 3_validated 4_video
 ```
 
 ## Dépendances
 
-- OpenCV
-- NumPy
-- MediaPipe
+- OpenCV (>=4.8.0) : Traitement d'images et vidéo
+- NumPy (>=1.24.0) : Calculs numériques
+- MediaPipe (>=0.10.0) : Détection et analyse faciale
+- tqdm (>=4.65.0) : Barres de progression
 
 ## Licence
 

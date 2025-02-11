@@ -20,5 +20,5 @@ max_morph_strength = 1.0   # Plus de morphing, pour images différentes
 similarity_threshold = 0.6  # Seuil pour décider du type de transition
 
 # Variables techniques
-version = "2.3-arm"
+version = "3.0"
 max_faces = 5 
