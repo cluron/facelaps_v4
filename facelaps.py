@@ -4,14 +4,9 @@
 import os
 import sys
 import fcntl
+import argparse
 
-# Rediriger stderr vers /dev/null
-devnull = open(os.devnull, 'w')
-stderr_fd = sys.stderr.fileno()
-stderr_save = os.dup(stderr_fd)
-os.dup2(devnull.fileno(), stderr_fd)
-
-# Configuration silencieuse avant tout import
+# Configuration silencieuse AVANT TOUT
 os.environ.update({
     'TF_CPP_MIN_LOG_LEVEL': '3',           # Supprimer les messages TensorFlow
     'MEDIAPIPE_DISABLE_GPU': '1',          # Désactiver les messages GPU de MediaPipe
@@ -22,11 +17,29 @@ os.environ.update({
     'CUDA_VISIBLE_DEVICES': '-1',          # Désactiver CUDA
     'TF_SILENCE_DEPRECATION_WARNINGS': '1', # Supprimer les avertissements de dépréciation
     'PYTHONWARNINGS': 'ignore',            # Supprimer les warnings Python
-    'FORCE_MEDIAPIPE_CPU': '1'             # Forcer MediaPipe en mode CPU
+    'FORCE_MEDIAPIPE_CPU': '1',            # Forcer MediaPipe en mode CPU
+    'PYOPENGL_PLATFORM': 'egl',            # Utiliser EGL pour OpenGL
+    'DISPLAY': '',                         # Désactiver l'affichage X11
+    'MEDIAPIPE_USE_GPU': '0',              # Désactiver explicitement le GPU pour MediaPipe
+    'TF_FORCE_GPU_ALLOW_GROWTH': 'false',  # Désactiver l'allocation GPU dynamique
+    'CUDA_CACHE_DISABLE': '1',             # Désactiver le cache CUDA
 })
 
-# Supprimer tous les handlers de logging existants
+# Rediriger stderr vers /dev/null
+devnull = open(os.devnull, 'w')
+stderr_fd = sys.stderr.fileno()
+stderr_save = os.dup(stderr_fd)
+os.dup2(devnull.fileno(), stderr_fd)
+
+# Configuration du logging avant les imports
 import logging
+logging.getLogger().setLevel(logging.ERROR)
+for logger_name in ['tensorflow', 'mediapipe', 'absl', 'matplotlib', 'numba', 'PIL']:
+    logging.getLogger(logger_name).setLevel(logging.ERROR)
+    logging.getLogger(logger_name).addHandler(logging.NullHandler())
+    logging.getLogger(logger_name).propagate = False
+
+# Supprimer tous les handlers existants
 root = logging.getLogger()
 if root.handlers:
     for handler in root.handlers:
@@ -48,19 +61,12 @@ import threading
 import time
 from pathlib import Path
 
-# Désactiver les logs pour tous les modules
-logging.getLogger('tensorflow').setLevel(logging.ERROR)
-logging.getLogger('mediapipe').setLevel(logging.ERROR)
-logging.getLogger('absl').setLevel(logging.ERROR)
-logging.getLogger('matplotlib').setLevel(logging.ERROR)
-logging.getLogger('numba').setLevel(logging.ERROR)
-
 # Restaurer stderr pour nos propres messages
 os.dup2(stderr_save, stderr_fd)
 os.close(stderr_save)
 devnull.close()
 
-# Configuration du logging pour notre application
+# Configuration du logging pour notre application uniquement
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
@@ -138,8 +144,7 @@ def sysArgs():
    {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated{bcolors.RESET}
 
 2. Extract and verify immediately:
-   {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated \\
-       --batch-verify --grid 10x10{bcolors.RESET}
+   {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 10x10{bcolors.RESET}
 
 3. Verify faces in grid interface:
    {bcolors.JUST}./facelaps.py batch-verify -i 3_validated --grid 10x10{bcolors.RESET}
@@ -172,20 +177,18 @@ def sysArgs():
    {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated{bcolors.RESET}
 
 2. With immediate batch verification:
-   {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated \\
-       --batch-verify --grid 10x10{bcolors.RESET}
+   {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify{bcolors.RESET}
 
-3. With custom grid size:
-   {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated \\
-       --batch-verify --grid 5x4{bcolors.RESET}
+3. With immediate batch verification andcustom grid size:
+   {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 5x4{bcolors.RESET}
 
 {bcolors.OK}Directory structure:{bcolors.RESET}
 
 {bcolors.JUST}0_template_photos/{bcolors.RESET}  Reference photos of the face to match
-{bcolors.JUST}1_input/{bcolors.RESET}           Photos to process
-{bcolors.JUST}2_rejected/{bcolors.RESET}        Non-matching photos
-{bcolors.JUST}3_validated/{bcolors.RESET}       Extracted faces
-{bcolors.JUST}4_video/{bcolors.RESET}          Generated videos
+{bcolors.JUST}1_input/{bcolors.RESET}            Photos to process
+{bcolors.JUST}2_rejected/{bcolors.RESET}         Non-matching photos
+{bcolors.JUST}3_validated/{bcolors.RESET}        Extracted faces
+{bcolors.JUST}4_video/{bcolors.RESET}            Generated videos
 """)
     parser_extract.add_argument('-t', '--template', required=True, 
         help=f'{bcolors.OK}Directory containing reference face photos (e.g., 0_template_photos){bcolors.RESET}')
@@ -214,6 +217,9 @@ def sysArgs():
 2. Create video with custom fps:
    {bcolors.JUST}./facelaps.py make-video -i validated -o video -f 10{bcolors.RESET}
 
+3. Create video with adaptive transitions:
+   {bcolors.JUST}./facelaps.py make-video -i validated -o video -f 7 --adaptive{bcolors.RESET}
+
 Note: All transitions use smooth crossfade for consistent results
 """)
     parser_video.add_argument('-i', '--input', required=True, 
@@ -222,6 +228,8 @@ Note: All transitions use smooth crossfade for consistent results
         help=f'{bcolors.OK}Output directory for the generated video (e.g., 4_video){bcolors.RESET}')
     parser_video.add_argument('-f', '--fps', type=int, required=True, 
         help=f'{bcolors.OK}Frames per second (e.g., 7 for smooth transitions){bcolors.RESET}')
+    parser_video.add_argument('--adaptive', action='store_true',
+        help=f'{bcolors.OK}Use adaptive transitions based on image similarity{bcolors.RESET}')
 
     # Parser pour batch-verify
     parser_verify = subparsers.add_parser('batch-verify',
@@ -349,7 +357,7 @@ if __name__ == "__main__":
             frame_per_second = args['fps']
             print(f"{bcolors.JUST}\n[Arguments for {args['action']} mode are valid and stored]{bcolors.RESET}")
             print(f"{bcolors.JUST}\n[Starting video creation]{bcolors.RESET}")
-            create_video(DIR_extracted, DIR_video_output, version, frame_per_second)
+            create_video(DIR_extracted, DIR_video_output, version, frame_per_second, use_adaptive=args.get('adaptive', False))
 
         elif args['action'] == "concatenate-videos":
             logger.debug("Starting video concatenation...")

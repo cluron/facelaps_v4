@@ -6,26 +6,14 @@ import sys
 import fcntl
 import atexit  # Pour restaurer stderr à la fin
 
-# Sauvegarder stderr original
-stderr = sys.stderr
-# Créer un pipe pour stderr
-r, w = os.pipe()
-# Dupliquer le descripteur de fichier stderr
-os.dup2(w, sys.stderr.fileno())
-# Fermer les descripteurs inutiles
-os.close(w)
-# Mettre le pipe en mode non-bloquant
-flags = fcntl.fcntl(r, fcntl.F_GETFL)
-fcntl.fcntl(r, fcntl.F_SETFL, flags | os.O_NONBLOCK)
-
-# Configuration des variables d'environnement
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-os.environ['ABSL_LOGGING_MIN_LEVEL'] = '99'
+# Configuration des variables d'environnement avec des niveaux de log moins restrictifs
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'  # Show warnings and errors
+os.environ['ABSL_LOGGING_MIN_LEVEL'] = '1'  # Show warnings and errors
 os.environ['MEDIAPIPE_DISABLE_GPU'] = '1'
-os.environ['PYTHONWARNINGS'] = 'ignore'
-os.environ['OPENCV_LOG_LEVEL'] = '0'
-os.environ['AUTOGRAPH_VERBOSITY'] = '0'
-os.environ['CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['PYTHONWARNINGS'] = 'default'
+os.environ['OPENCV_LOG_LEVEL'] = '1'  # Show warnings and errors
+os.environ['AUTOGRAPH_VERBOSITY'] = '1'
+os.environ['CPP_MIN_LOG_LEVEL'] = '1'
 
 # Imports qui génèrent des messages
 import mediapipe as mp
@@ -35,8 +23,9 @@ mp_drawing = mp.solutions.drawing_utils
 
 # Fonction pour restaurer stderr à la fin
 def restore_stderr():
-    sys.stderr = stderr
-    os.close(r)
+    pass  # Temporairement désactivé
+    # sys.stderr = stderr
+    # os.close(r)
 
 # Enregistrer la fonction pour qu'elle soit appelée à la fin
 atexit.register(restore_stderr)
