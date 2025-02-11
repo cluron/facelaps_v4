@@ -63,50 +63,60 @@ def sysArgs():
 {bcolors.OK}Initial Setup:{bcolors.RESET}
 
   1. Create and activate virtual environment:
-     {bcolors.JUST}# On macOS/Linux:{bcolors.RESET}
+
+     {bcolors.JUST}# On macOS/Linux{bcolors.RESET}
      python3 -m venv venv
      source venv/bin/activate
 
-     {bcolors.JUST}# On Windows:{bcolors.RESET}
+     {bcolors.JUST}# On Windows{bcolors.RESET}
      python -m venv venv
      venv\\Scripts\\activate
 
   2. Install dependencies:
+
      {bcolors.JUST}# Update pip{bcolors.RESET}
      python -m pip install --upgrade pip
-     
+
      {bcolors.JUST}# Install required packages{bcolors.RESET}
      pip install -r requirements.txt
 
   3. Create directory structure:
-     {bcolors.JUST}mkdir 0_template_photos 1_input 2_rejected 3_validated 4_video{bcolors.RESET}
 
-{bcolors.OK}Examples:{bcolors.RESET}
+     {bcolors.JUST}# Create all required directories{bcolors.RESET}
+     mkdir -p 0_template_photos 1_input 2_rejected 3_validated 4_video
 
-  # Extract faces from photos:
-  {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated{bcolors.RESET}
+{bcolors.OK}Directory Structure:{bcolors.RESET}
 
-  # Extract faces and verify them immediately:
-  {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated \\
-      --batch-verify --grid 10x10{bcolors.RESET}
+  {bcolors.JUST}0_template_photos/{bcolors.RESET}  Reference photos of the face to match
+  {bcolors.JUST}1_input/{bcolors.RESET}           Photos to process
+  {bcolors.JUST}2_rejected/{bcolors.RESET}        Non-matching photos
+  {bcolors.JUST}3_validated/{bcolors.RESET}       Extracted faces
+  {bcolors.JUST}4_video/{bcolors.RESET}          Generated videos
 
-  # Verify faces in a grid interface:
-  {bcolors.JUST}./facelaps.py batch-verify -i 3_validated --grid 10x10{bcolors.RESET}
+{bcolors.OK}Workflow Examples:{bcolors.RESET}
 
-  # Create a video with balanced transitions (50% morphing, 50% crossfade):
-  {bcolors.JUST}./facelaps.py make-video -i 3_validated -o 4_video -f 7 -m 0.5{bcolors.RESET}
+  1. Extract faces from photos:
+     {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated{bcolors.RESET}
 
-  # Create a video with smart transitions (auto-adjusts between morphing and crossfade):
-  {bcolors.JUST}./facelaps.py make-video -i 3_validated -o 4_video -f 7 --adaptive{bcolors.RESET}
+  2. Extract and verify immediately:
+     {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated \\
+         --batch-verify --grid 10x10{bcolors.RESET}
 
-  # Concatenate multiple videos:
-  {bcolors.JUST}./facelaps.py concatenate-videos -s 4_video{bcolors.RESET}
+  3. Verify faces in grid interface:
+     {bcolors.JUST}./facelaps.py batch-verify -i 3_validated --grid 10x10{bcolors.RESET}
+
+  4. Create video with transitions:
+     {bcolors.JUST}./facelaps.py make-video -i 3_validated -o 4_video -f 7{bcolors.RESET}
+
+  5. Concatenate multiple videos:
+     {bcolors.JUST}./facelaps.py concatenate-videos -s 4_video{bcolors.RESET}
 
 {bcolors.OK}Dependencies:{bcolors.RESET}
-  - OpenCV (>=4.8.0) : Image and video processing
-  - NumPy (>=1.24.0) : Numerical computations
-  - MediaPipe (>=0.10.0) : Face detection and analysis
-  - tqdm (>=4.65.0) : Progress bars
+
+  {bcolors.JUST}OpenCV (>=4.8.0){bcolors.RESET}     Image and video processing
+  {bcolors.JUST}NumPy (>=1.24.0){bcolors.RESET}     Numerical computations
+  {bcolors.JUST}MediaPipe (>=0.10.0){bcolors.RESET} Face detection and analysis
+  {bcolors.JUST}tqdm (>=4.65.0){bcolors.RESET}      Progress bars
 """)
     
     subparsers = parser.add_subparsers(dest='action', help=f'{bcolors.OK}Available commands{bcolors.RESET}')
