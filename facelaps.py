@@ -60,6 +60,27 @@ def sysArgs():
         description=f'{bcolors.OK}FaceLaps - Create timelapse videos from face photos{bcolors.RESET}',
         formatter_class=ColoredHelpFormatter,
         epilog=f"""
+{bcolors.OK}Initial Setup:{bcolors.RESET}
+
+  1. Create and activate virtual environment:
+     {bcolors.JUST}# On macOS/Linux:{bcolors.RESET}
+     python3 -m venv venv
+     source venv/bin/activate
+
+     {bcolors.JUST}# On Windows:{bcolors.RESET}
+     python -m venv venv
+     venv\\Scripts\\activate
+
+  2. Install dependencies:
+     {bcolors.JUST}# Update pip{bcolors.RESET}
+     python -m pip install --upgrade pip
+     
+     {bcolors.JUST}# Install required packages{bcolors.RESET}
+     pip install -r requirements.txt
+
+  3. Create directory structure:
+     {bcolors.JUST}mkdir 0_template_photos 1_input 2_rejected 3_validated 4_video{bcolors.RESET}
+
 {bcolors.OK}Examples:{bcolors.RESET}
 
   # Extract faces from photos:
@@ -80,6 +101,12 @@ def sysArgs():
 
   # Concatenate multiple videos:
   {bcolors.JUST}./facelaps.py concatenate-videos -s 4_video{bcolors.RESET}
+
+{bcolors.OK}Dependencies:{bcolors.RESET}
+  - OpenCV (>=4.8.0) : Image and video processing
+  - NumPy (>=1.24.0) : Numerical computations
+  - MediaPipe (>=0.10.0) : Face detection and analysis
+  - tqdm (>=4.65.0) : Progress bars
 """)
     
     subparsers = parser.add_subparsers(dest='action', help=f'{bcolors.OK}Available commands{bcolors.RESET}')
