@@ -61,11 +61,13 @@ def sysArgs():
         formatter_class=ColoredHelpFormatter,
         epilog=f"""
 {bcolors.OK}Examples:{bcolors.RESET}
+
   # Extract faces from photos:
   {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated{bcolors.RESET}
 
   # Extract faces and verify them immediately:
-  {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 10x10{bcolors.RESET}
+  {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated \\
+      --batch-verify --grid 10x10{bcolors.RESET}
 
   # Verify faces in a grid interface:
   {bcolors.JUST}./facelaps.py batch-verify -i 3_validated --grid 10x10{bcolors.RESET}
@@ -89,14 +91,17 @@ def sysArgs():
         formatter_class=ColoredHelpFormatter,
         epilog=f"""
 {bcolors.OK}Examples:{bcolors.RESET}
+
   # Basic extraction:
   {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated{bcolors.RESET}
 
   # With immediate batch verification:
-  {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 10x10{bcolors.RESET}
+  {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated \\
+      --batch-verify --grid 10x10{bcolors.RESET}
 
   # With custom grid size:
-  {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated --batch-verify --grid 5x4{bcolors.RESET}
+  {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated \\
+      --batch-verify --grid 5x4{bcolors.RESET}
 
 {bcolors.OK}Directory structure:{bcolors.RESET}
   {bcolors.JUST}0_template_photos/{bcolors.RESET}  - Contains reference photos of the face to match
@@ -125,6 +130,7 @@ def sysArgs():
         formatter_class=ColoredHelpFormatter,
         epilog=f"""
 {bcolors.OK}Examples:{bcolors.RESET}
+
   # Create video with default settings:
   {bcolors.JUST}./facelaps.py make-video -i validated -o video -f 7{bcolors.RESET}
 
@@ -147,6 +153,7 @@ Note: All transitions use smooth crossfade for consistent results
         formatter_class=ColoredHelpFormatter,
         epilog=f"""
 {bcolors.OK}Examples:{bcolors.RESET}
+
   # Verify with default 10x10 grid:
   {bcolors.JUST}./facelaps.py batch-verify -i validated{bcolors.RESET}
 
@@ -171,6 +178,8 @@ Note: All transitions use smooth crossfade for consistent results
         formatter_class=ColoredHelpFormatter,
         epilog=f"""
 {bcolors.OK}Example:{bcolors.RESET}
+
+  # Concatenate videos in a folder:
   {bcolors.JUST}./facelaps.py concatenate-videos -s video_folder{bcolors.RESET}
 
 Note: Videos will be concatenated in alphabetical order
