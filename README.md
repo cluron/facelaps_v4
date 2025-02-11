@@ -137,36 +137,56 @@ git clone https://github.com/cluron/facelaps2.git
 cd facelaps2
 ```
 
-2. Créer un environnement virtuel (recommandé) :
-```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# ou
-venv\Scripts\activate     # Windows
-```
+2. Créer et activer un environnement virtuel (fortement recommandé) :
 
-3. Installation (choisir une méthode) :
-
-   a. Installation rapide des dépendances :
+   Sur macOS et Linux :
    ```bash
+   # Créer l'environnement virtuel
+   python3 -m venv venv
+   
+   # Activer l'environnement virtuel
+   source venv/bin/activate
+   ```
+
+   Sur Windows :
+   ```bash
+   # Créer l'environnement virtuel
+   python -m venv venv
+   
+   # Activer l'environnement virtuel
+   venv\Scripts\activate
+   ```
+
+   Pour vérifier que l'environnement virtuel est bien activé :
+   - Le prompt devrait maintenant commencer par `(venv)`
+   - La commande `which python` (ou `where python` sur Windows) devrait pointer vers l'environnement virtuel
+
+3. Installation des dépendances :
+   ```bash
+   # Mettre à jour pip
+   python -m pip install --upgrade pip
+   
+   # Installer les dépendances
    pip install -r requirements.txt
    ```
 
-   b. Installation complète du package :
+4. Créer la structure des dossiers :
    ```bash
-   pip install -e .
+   mkdir 0_template_photos 1_input 2_rejected 3_validated 4_video
    ```
 
-4. Créer la structure des dossiers :
-```bash
-mkdir 0_template_photos 1_input 2_rejected 3_validated 4_video
-```
+5. Pour désactiver l'environnement virtuel quand vous avez terminé :
+   ```bash
+   deactivate
+   ```
 
 ## Dépendances
 
-- OpenCV
-- NumPy
-- MediaPipe
+Le projet utilise les bibliothèques Python suivantes :
+- OpenCV (>=4.8.0) : Traitement d'images et vidéo
+- NumPy (>=1.24.0) : Calculs numériques
+- MediaPipe (>=0.10.0) : Détection et analyse faciale
+- tqdm (>=4.65.0) : Barres de progression
 
 ## Licence
 
