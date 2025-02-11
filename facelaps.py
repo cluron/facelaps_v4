@@ -1,5 +1,40 @@
 #!/usr/bin/env python3
 
+# Redirection de stderr et configuration des variables d'environnement
+import os
+import sys
+import fcntl
+
+# Rediriger stderr vers /dev/null
+devnull = open(os.devnull, 'w')
+stderr_fd = sys.stderr.fileno()
+stderr_save = os.dup(stderr_fd)
+os.dup2(devnull.fileno(), stderr_fd)
+
+# Configuration silencieuse avant tout import
+os.environ.update({
+    'TF_CPP_MIN_LOG_LEVEL': '3',           # Supprimer les messages TensorFlow
+    'MEDIAPIPE_DISABLE_GPU': '1',          # Désactiver les messages GPU de MediaPipe
+    'OPENCV_LOG_LEVEL': '3',               # Supprimer les messages OpenCV
+    'AUTOGRAPH_VERBOSITY': '0',            # Supprimer les messages AutoGraph
+    'CPP_MIN_LOG_LEVEL': '3',              # Supprimer les messages C++
+    'TF_ENABLE_ONEDNN_OPTS': '0',          # Désactiver les optimisations OneDNN
+    'CUDA_VISIBLE_DEVICES': '-1',          # Désactiver CUDA
+    'TF_SILENCE_DEPRECATION_WARNINGS': '1', # Supprimer les avertissements de dépréciation
+    'PYTHONWARNINGS': 'ignore',            # Supprimer les warnings Python
+    'FORCE_MEDIAPIPE_CPU': '1'             # Forcer MediaPipe en mode CPU
+})
+
+# Supprimer tous les handlers de logging existants
+import logging
+root = logging.getLogger()
+if root.handlers:
+    for handler in root.handlers:
+        root.removeHandler(handler)
+
+# Configuration minimale du logging
+logging.basicConfig(level=logging.ERROR)
+
 # Imports de nos modules
 from utils import print_banner, loading_animation, sysArgs, bcolors
 from config import version, model, sensibility, harmony_ratio, quality_check_scale_factor, max_faces
@@ -11,15 +46,23 @@ from face_quality import FaceQualityAnalyzer
 # Autres imports standards
 import threading
 import time
-import os
-import sys
-import argparse
-import logging
 from pathlib import Path
 
-# Configuration du logging
-logging.basicConfig(level=logging.DEBUG)
+# Désactiver les logs pour tous les modules
+logging.getLogger('tensorflow').setLevel(logging.ERROR)
+logging.getLogger('mediapipe').setLevel(logging.ERROR)
+logging.getLogger('absl').setLevel(logging.ERROR)
+logging.getLogger('matplotlib').setLevel(logging.ERROR)
+logging.getLogger('numba').setLevel(logging.ERROR)
+
+# Restaurer stderr pour nos propres messages
+os.dup2(stderr_save, stderr_fd)
+os.close(stderr_save)
+devnull.close()
+
+# Configuration du logging pour notre application
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 def sysArgs():
     class ColoredRawHelpFormatter(argparse.RawDescriptionHelpFormatter):
