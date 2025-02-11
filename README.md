@@ -1,4 +1,4 @@
-# FaceLaps v2.3-arm
+# FaceLaps v3.0
 
 Un outil pour créer des timelapse de visages à partir d'une série de photos.
 
