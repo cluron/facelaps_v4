@@ -22,11 +22,7 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 def sysArgs():
-    class ColoredHelpFormatter(argparse.HelpFormatter):
-        def __init__(self, prog, indent_increment=2, max_help_position=30, width=None):
-            super().__init__(prog, indent_increment, max_help_position, width)
-            self._program_name = prog
-
+    class ColoredRawHelpFormatter(argparse.RawDescriptionHelpFormatter):
         def _format_action(self, action):
             # Colorer les options en cyan
             result = super()._format_action(action)
@@ -58,65 +54,65 @@ def sysArgs():
 
     parser = argparse.ArgumentParser(
         description=f'{bcolors.OK}FaceLaps - Create timelapse videos from face photos{bcolors.RESET}',
-        formatter_class=ColoredHelpFormatter,
+        formatter_class=ColoredRawHelpFormatter,
         epilog=f"""
 {bcolors.OK}Initial Setup:{bcolors.RESET}
 
-  1. Create and activate virtual environment:
+1. Create and activate virtual environment:
 
-     {bcolors.JUST}# On macOS/Linux{bcolors.RESET}
-     python3 -m venv venv
-     source venv/bin/activate
+   {bcolors.JUST}# On macOS/Linux{bcolors.RESET}
+   python3 -m venv venv
+   source venv/bin/activate
 
-     {bcolors.JUST}# On Windows{bcolors.RESET}
-     python -m venv venv
-     venv\\Scripts\\activate
+   {bcolors.JUST}# On Windows{bcolors.RESET}
+   python -m venv venv
+   venv\\Scripts\\activate
 
-  2. Install dependencies:
+2. Install dependencies:
 
-     {bcolors.JUST}# Update pip{bcolors.RESET}
-     python -m pip install --upgrade pip
+   {bcolors.JUST}# Update pip{bcolors.RESET}
+   python -m pip install --upgrade pip
 
-     {bcolors.JUST}# Install required packages{bcolors.RESET}
-     pip install -r requirements.txt
+   {bcolors.JUST}# Install required packages{bcolors.RESET}
+   pip install -r requirements.txt
 
-  3. Create directory structure:
+3. Create directory structure:
 
-     {bcolors.JUST}# Create all required directories{bcolors.RESET}
-     mkdir -p 0_template_photos 1_input 2_rejected 3_validated 4_video
+   {bcolors.JUST}# Create all required directories{bcolors.RESET}
+   mkdir -p 0_template_photos 1_input 2_rejected 3_validated 4_video
 
 {bcolors.OK}Directory Structure:{bcolors.RESET}
 
-  {bcolors.JUST}0_template_photos/{bcolors.RESET}  Reference photos of the face to match
-  {bcolors.JUST}1_input/{bcolors.RESET}           Photos to process
-  {bcolors.JUST}2_rejected/{bcolors.RESET}        Non-matching photos
-  {bcolors.JUST}3_validated/{bcolors.RESET}       Extracted faces
-  {bcolors.JUST}4_video/{bcolors.RESET}          Generated videos
+{bcolors.JUST}0_template_photos/{bcolors.RESET}  Reference photos of the face to match
+{bcolors.JUST}1_input/{bcolors.RESET}           Photos to process
+{bcolors.JUST}2_rejected/{bcolors.RESET}        Non-matching photos
+{bcolors.JUST}3_validated/{bcolors.RESET}       Extracted faces
+{bcolors.JUST}4_video/{bcolors.RESET}          Generated videos
 
 {bcolors.OK}Workflow Examples:{bcolors.RESET}
 
-  1. Extract faces from photos:
-     {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated{bcolors.RESET}
+1. Extract faces from photos:
+   {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated{bcolors.RESET}
 
-  2. Extract and verify immediately:
-     {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated \\
-         --batch-verify --grid 10x10{bcolors.RESET}
+2. Extract and verify immediately:
+   {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated \\
+       --batch-verify --grid 10x10{bcolors.RESET}
 
-  3. Verify faces in grid interface:
-     {bcolors.JUST}./facelaps.py batch-verify -i 3_validated --grid 10x10{bcolors.RESET}
+3. Verify faces in grid interface:
+   {bcolors.JUST}./facelaps.py batch-verify -i 3_validated --grid 10x10{bcolors.RESET}
 
-  4. Create video with transitions:
-     {bcolors.JUST}./facelaps.py make-video -i 3_validated -o 4_video -f 7{bcolors.RESET}
+4. Create video with transitions:
+   {bcolors.JUST}./facelaps.py make-video -i 3_validated -o 4_video -f 7{bcolors.RESET}
 
-  5. Concatenate multiple videos:
-     {bcolors.JUST}./facelaps.py concatenate-videos -s 4_video{bcolors.RESET}
+5. Concatenate multiple videos:
+   {bcolors.JUST}./facelaps.py concatenate-videos -s 4_video{bcolors.RESET}
 
 {bcolors.OK}Dependencies:{bcolors.RESET}
 
-  {bcolors.JUST}OpenCV (>=4.8.0){bcolors.RESET}     Image and video processing
-  {bcolors.JUST}NumPy (>=1.24.0){bcolors.RESET}     Numerical computations
-  {bcolors.JUST}MediaPipe (>=0.10.0){bcolors.RESET} Face detection and analysis
-  {bcolors.JUST}tqdm (>=4.65.0){bcolors.RESET}      Progress bars
+{bcolors.JUST}OpenCV (>=4.8.0){bcolors.RESET}     Image and video processing
+{bcolors.JUST}NumPy (>=1.24.0){bcolors.RESET}     Numerical computations
+{bcolors.JUST}MediaPipe (>=0.10.0){bcolors.RESET} Face detection and analysis
+{bcolors.JUST}tqdm (>=4.65.0){bcolors.RESET}      Progress bars
 """)
     
     subparsers = parser.add_subparsers(dest='action', help=f'{bcolors.OK}Available commands{bcolors.RESET}')
@@ -125,27 +121,28 @@ def sysArgs():
     parser_extract = subparsers.add_parser('extract', 
         help=f'{bcolors.OK}Extract and align faces from photos{bcolors.RESET}',
         description=f'{bcolors.OK}Extract, align and validate faces from a set of photos using template matching{bcolors.RESET}',
-        formatter_class=ColoredHelpFormatter,
+        formatter_class=ColoredRawHelpFormatter,
         epilog=f"""
 {bcolors.OK}Examples:{bcolors.RESET}
 
-  # Basic extraction:
-  {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated{bcolors.RESET}
+1. Basic extraction:
+   {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated{bcolors.RESET}
 
-  # With immediate batch verification:
-  {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated \\
-      --batch-verify --grid 10x10{bcolors.RESET}
+2. With immediate batch verification:
+   {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated \\
+       --batch-verify --grid 10x10{bcolors.RESET}
 
-  # With custom grid size:
-  {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated \\
-      --batch-verify --grid 5x4{bcolors.RESET}
+3. With custom grid size:
+   {bcolors.JUST}./facelaps.py extract -t 0_template_photos -s 1_input -r 2_rejected -op 3_validated \\
+       --batch-verify --grid 5x4{bcolors.RESET}
 
 {bcolors.OK}Directory structure:{bcolors.RESET}
-  {bcolors.JUST}0_template_photos/{bcolors.RESET}  - Contains reference photos of the face to match
-  {bcolors.JUST}1_input/{bcolors.RESET}           - Contains all photos to process
-  {bcolors.JUST}2_rejected/{bcolors.RESET}        - Where non-matching photos will be moved
-  {bcolors.JUST}3_validated/{bcolors.RESET}       - Where extracted faces will be saved
-  {bcolors.JUST}4_video/{bcolors.RESET}          - Where generated videos will be saved
+
+{bcolors.JUST}0_template_photos/{bcolors.RESET}  Reference photos of the face to match
+{bcolors.JUST}1_input/{bcolors.RESET}           Photos to process
+{bcolors.JUST}2_rejected/{bcolors.RESET}        Non-matching photos
+{bcolors.JUST}3_validated/{bcolors.RESET}       Extracted faces
+{bcolors.JUST}4_video/{bcolors.RESET}          Generated videos
 """)
     parser_extract.add_argument('-t', '--template', required=True, 
         help=f'{bcolors.OK}Directory containing reference face photos (e.g., 0_template_photos){bcolors.RESET}')
@@ -164,15 +161,15 @@ def sysArgs():
     parser_video = subparsers.add_parser('make-video',
         help=f'{bcolors.OK}Create a video from validated faces{bcolors.RESET}',
         description=f'{bcolors.OK}Create a timelapse video from validated face photos with crossfade transitions{bcolors.RESET}',
-        formatter_class=ColoredHelpFormatter,
+        formatter_class=ColoredRawHelpFormatter,
         epilog=f"""
 {bcolors.OK}Examples:{bcolors.RESET}
 
-  # Create video with default settings:
-  {bcolors.JUST}./facelaps.py make-video -i validated -o video -f 7{bcolors.RESET}
+1. Create video with default settings:
+   {bcolors.JUST}./facelaps.py make-video -i validated -o video -f 7{bcolors.RESET}
 
-  # Create video with custom fps:
-  {bcolors.JUST}./facelaps.py make-video -i validated -o video -f 10{bcolors.RESET}
+2. Create video with custom fps:
+   {bcolors.JUST}./facelaps.py make-video -i validated -o video -f 10{bcolors.RESET}
 
 Note: All transitions use smooth crossfade for consistent results
 """)
@@ -187,15 +184,15 @@ Note: All transitions use smooth crossfade for consistent results
     parser_verify = subparsers.add_parser('batch-verify',
         help=f'{bcolors.OK}Visual interface to verify and remove faces{bcolors.RESET}',
         description=f'{bcolors.OK}Interactive grid interface to review and remove unwanted faces{bcolors.RESET}',
-        formatter_class=ColoredHelpFormatter,
+        formatter_class=ColoredRawHelpFormatter,
         epilog=f"""
 {bcolors.OK}Examples:{bcolors.RESET}
 
-  # Verify with default 10x10 grid:
-  {bcolors.JUST}./facelaps.py batch-verify -i validated{bcolors.RESET}
+1. Verify with default 10x10 grid:
+   {bcolors.JUST}./facelaps.py batch-verify -i validated{bcolors.RESET}
 
-  # Verify with custom grid size:
-  {bcolors.JUST}./facelaps.py batch-verify -i validated --grid 5x4{bcolors.RESET}
+2. Verify with custom grid size:
+   {bcolors.JUST}./facelaps.py batch-verify -i validated --grid 5x4{bcolors.RESET}
 
 {bcolors.OK}Interface controls:{bcolors.RESET}
   - Click on faces to mark/unmark them for deletion
@@ -212,12 +209,12 @@ Note: All transitions use smooth crossfade for consistent results
     parser_concat = subparsers.add_parser('concatenate-videos',
         help=f'{bcolors.OK}Concatenate multiple videos{bcolors.RESET}',
         description=f'{bcolors.OK}Combine multiple timelapse videos into a single video{bcolors.RESET}',
-        formatter_class=ColoredHelpFormatter,
+        formatter_class=ColoredRawHelpFormatter,
         epilog=f"""
 {bcolors.OK}Example:{bcolors.RESET}
 
-  # Concatenate videos in a folder:
-  {bcolors.JUST}./facelaps.py concatenate-videos -s video_folder{bcolors.RESET}
+1. Concatenate videos in a folder:
+   {bcolors.JUST}./facelaps.py concatenate-videos -s video_folder{bcolors.RESET}
 
 Note: Videos will be concatenated in alphabetical order
 """)
