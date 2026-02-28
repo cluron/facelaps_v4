@@ -14,6 +14,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         '/api': { target: `http://localhost:${apiPort}`, changeOrigin: true },
         '/files': { target: `http://localhost:${apiPort}`, changeOrigin: true },
+        '/models': { target: `http://localhost:${apiPort}`, changeOrigin: true },
       },
     },
   };

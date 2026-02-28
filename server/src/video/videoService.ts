@@ -40,16 +40,16 @@ export async function createVideo(
   const outPath = path.join(outputDir, outName);
   const ffmpeg = getFfmpegPath();
 
-  // -framerate 1/7 = 1 image toutes les 1/7 s => 7 images/s. -i list.txt -vf "..." pour crossfade si on veut
+  // mpeg4 pour compatibilité avec ffmpeg sans libx264 (ex. anciennes installs macOS)
   await execFileAsync(ffmpeg, [
     '-y',
     '-f', 'concat',
     '-safe', '0',
     '-r', String(fps),
     '-i', listPath,
-    '-c:v', 'libx264',
+    '-c:v', 'mpeg4',
+    '-q:v', '3',
     '-pix_fmt', 'yuv420p',
-    '-movflags', '+faststart',
     outPath,
   ], { maxBuffer: 10 * 1024 * 1024 });
 

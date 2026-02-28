@@ -1,9 +1,3 @@
-// Polyfill pour TensorFlow.js / face-api en Node (le bundle attend util.TextEncoder)
-import * as nodeUtil from 'node:util';
-(globalThis as any).util = nodeUtil;
-(globalThis as any).TextEncoder = nodeUtil.TextEncoder;
-(globalThis as any).TextDecoder = nodeUtil.TextDecoder;
-
 import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
@@ -12,11 +6,15 @@ import { fileURLToPath } from 'node:url';
 import pipeline from './routes/pipeline.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.resolve(__dirname, '..', '..');
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3001;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+
+// Modèles face-api pour le client (extraction dans le navigateur)
+app.use('/models', express.static(path.join(projectRoot, 'server', 'models')));
 
 app.use('/api', pipeline);
 
@@ -32,15 +30,14 @@ app.get('/files/:folder/:filename', (req, res) => {
   };
   const realFolder = allowed[folder];
   if (!realFolder || !filename || filename.includes('..')) return res.status(400).end();
-  const root = path.resolve(__dirname, '..', '..');
-  const file = path.join(root, realFolder, filename);
+  const file = path.join(projectRoot, realFolder, filename);
   res.sendFile(file, (err) => {
     if (err) res.status(404).end();
   });
 });
 
 // En prod, servir le client buildé (Vite sort dans client/dist)
-const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
+const clientDist = path.join(projectRoot, 'client', 'dist');
 if (process.env.NODE_ENV === 'production' && fs.existsSync(clientDist)) {
   app.use(express.static(clientDist));
   app.get('*', (_req, res) => res.sendFile(path.join(clientDist, 'index.html')));

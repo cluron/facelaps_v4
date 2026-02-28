@@ -81,22 +81,74 @@ router.get('/folders/:name', (req, res) => {
   res.json({ path: d, files });
 });
 
-/** Lance l’extraction: templates + input -> validated / rejected. */
-router.post('/extract', async (req, res) => {
-  try {
-    const templateDir = dir('templates');
-    const inputDir = dir('input');
-    const rejectedDir = dir('rejected');
-    const validatedDir = dir('validated');
-    if (!fs.existsSync(templateDir)) return res.status(400).json({ error: 'Dossier templates manquant' });
-    if (!fs.existsSync(inputDir)) return res.status(400).json({ error: 'Dossier input manquant' });
-    // Chargement différé pour appliquer le polyfill Node avant face-api/TensorFlow
-    const { extractFaces } = await import('../face/faceService.js');
-    const { results, matched } = await extractFaces(inputDir, templateDir, rejectedDir, validatedDir);
-    res.json({ results, matched, total: results.length });
-  } catch (e: any) {
-    res.status(500).json({ error: e?.message ?? 'Extraction failed' });
-  }
+/**
+ * Finalise l’extraction côté client : reçoit les visages validés, les crops rejetés (pose/qualité), et la liste des rejetés sans crop (no_face/no_match) à copier en input_xxx.
+ * Body: FormData avec "validated", "rejectedCrop" (fichiers image = visages extraits rejetés), "rejected" (JSON array de noms input à copier en input_xxx).
+ */
+router.post('/extract/complete', (req: Request, res: Response, next: NextFunction) => {
+  const inputDir = dir('input');
+  const rejectedDir = dir('rejected');
+  const validatedDir = dir('validated');
+  if (!fs.existsSync(inputDir)) return res.status(400).json({ error: 'Dossier input manquant' });
+  fs.mkdirSync(rejectedDir, { recursive: true });
+  fs.mkdirSync(validatedDir, { recursive: true });
+
+  const storage = multer.memoryStorage();
+  const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
+  upload.fields([
+    { name: 'validated', maxCount: 500 },
+    { name: 'rejectedCrop', maxCount: 500 },
+  ])(req, res, (err: any) => {
+    if (err) return res.status(400).json({ error: err?.message ?? 'Upload failed' });
+    const allFiles = (req as any).files as { validated?: Express.Multer.File[]; rejectedCrop?: Express.Multer.File[] } | undefined;
+    const validatedFiles = allFiles?.validated ?? [];
+    const rejectedCropFiles = allFiles?.rejectedCrop ?? [];
+    const rejectedRaw = (req as any).body?.rejected;
+    const validatedSourceRaw = (req as any).body?.validatedSourceNames;
+    let rejectedCopyFromInput: { sourceName: string; reason: string }[] = [];
+    let validatedSourceNames: string[] = [];
+    try {
+      const parsed = typeof rejectedRaw === 'string' ? JSON.parse(rejectedRaw) : Array.isArray(rejectedRaw) ? rejectedRaw : [];
+      rejectedCopyFromInput = parsed.map((x: unknown) =>
+        typeof x === 'object' && x !== null && 'sourceName' in x && 'reason' in x
+          ? { sourceName: String((x as any).sourceName), reason: String((x as any).reason) }
+          : { sourceName: String(x), reason: 'no_face' }
+      );
+    } catch (_) {}
+    try {
+      validatedSourceNames = typeof validatedSourceRaw === 'string' ? JSON.parse(validatedSourceRaw) : Array.isArray(validatedSourceRaw) ? validatedSourceRaw : [];
+    } catch (_) {}
+
+    const written: string[] = [];
+    for (const f of validatedFiles) {
+      const base = path.basename(f.originalname || 'image.jpg').replace(/\.[a-z]+$/i, '.jpg');
+      const outPath = path.join(validatedDir, base);
+      try {
+        fs.writeFileSync(outPath, f.buffer);
+        written.push(base);
+      } catch (_) {}
+    }
+    // Crops rejetés (visage tourné / qualité) : même format que validés, en 2_rejected.
+    for (const f of rejectedCropFiles) {
+      const base = path.basename(f.originalname || 'image.jpg').replace(/\.[a-z]+$/i, '.jpg');
+      if (base.includes('..')) continue;
+      try {
+        fs.writeFileSync(path.join(rejectedDir, base), f.buffer);
+      } catch (_) {}
+    }
+    // Rejetés sans crop (no_face, no_match) : copie de l’original en input_xxx pour référence (non récupérable).
+    for (const { sourceName, reason } of rejectedCopyFromInput) {
+      const base = path.basename(sourceName);
+      if (base.includes('..')) continue;
+      const src = path.join(inputDir, base);
+      if (fs.existsSync(src)) {
+        try {
+          fs.copyFileSync(src, path.join(rejectedDir, `${reason}_input_${base}`));
+        } catch (_) {}
+      }
+    }
+    res.json({ validated: written, matched: written.length });
+  });
 });
 
 /** Rejeter des images (déplacer de validated vers rejected). */
@@ -118,6 +170,33 @@ router.post('/reject', (req, res) => {
     }
   }
   res.json({ rejected });
+});
+
+const RESTORE_PREFIXES = ['face_turned_', 'low_quality_'];
+
+/** Récupérer des images (déplacer de rejected vers validated). Seules les crops reason_xxx sont déplacés, renommés en xxx. */
+router.post('/restore', (req, res) => {
+  const { files } = req.body as { files: string[] };
+  if (!Array.isArray(files) || files.length === 0) return res.status(400).json({ error: 'files array required' });
+  const rejectedDir = dir('rejected');
+  const validatedDir = dir('validated');
+  fs.mkdirSync(validatedDir, { recursive: true });
+  const restored: string[] = [];
+  for (const f of files) {
+    const base = path.basename(f);
+    const prefix = RESTORE_PREFIXES.find((p) => base.startsWith(p));
+    if (!prefix) continue;
+    const validatedName = base.slice(prefix.length);
+    if (validatedName.includes('..')) continue;
+    const src = path.join(rejectedDir, base);
+    if (fs.existsSync(src)) {
+      try {
+        fs.renameSync(src, path.join(validatedDir, validatedName));
+        restored.push(validatedName);
+      } catch (_) {}
+    }
+  }
+  res.json({ restored });
 });
 
 /** Créer la vidéo à partir du dossier validated. */
