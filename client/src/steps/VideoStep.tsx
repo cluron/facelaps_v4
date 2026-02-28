@@ -81,15 +81,15 @@ export function VideoStep() {
   const lastConcatName = concatPath?.split(/[/\\]/).pop() ?? null;
 
   return (
-    <section className="step-content video-step">
-      <h2 className="section-title">Vidéo</h2>
-      <p className="step-desc">
-        Les images de <strong>3_validated</strong> (ordre alphabétique) sont enchaînées en vidéo. FFmpeg doit être installé sur la machine.
+    <section className="step-content video-step" aria-labelledby="step-video-title">
+      <h2 id="step-video-title" className="section-title">Génération vidéo</h2>
+      <p className="step-intro">
+        Les images de <strong>3_validated</strong> sont enchaînées en vidéo dans l’ordre chronologique (date EXIF de prise de vue, sinon date du fichier, sinon nom). FFmpeg doit être installé sur la machine.
       </p>
 
       <div className="video-block video-generate">
         <h3 className="block-title">Générer une vidéo</h3>
-        <p className="block-desc">Choisissez le nombre d’images par seconde (fps) pour le timelapse.</p>
+        <p className="block-desc">Nombre d’images par seconde (fps) pour le timelapse.</p>
         <div className="form-row form-row-video">
           <label className="label-inline">
             <span>Images / seconde</span>

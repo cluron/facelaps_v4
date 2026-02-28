@@ -172,9 +172,9 @@ router.post('/reject', (req, res) => {
   res.json({ rejected });
 });
 
-const RESTORE_PREFIXES = ['face_turned_', 'low_quality_'];
+const RESTORE_PREFIXES = ['face_turned_', 'low_quality_', 'no_match_'];
 
-/** Récupérer des images (déplacer de rejected vers validated). Seules les crops reason_xxx sont déplacés, renommés en xxx. */
+/** Récupérer des images (déplacer de rejected vers validated). Crops reason_xxx → renommés en xxx ; rejets manuels → même nom. */
 router.post('/restore', (req, res) => {
   const { files } = req.body as { files: string[] };
   if (!Array.isArray(files) || files.length === 0) return res.status(400).json({ error: 'files array required' });
@@ -184,17 +184,15 @@ router.post('/restore', (req, res) => {
   const restored: string[] = [];
   for (const f of files) {
     const base = path.basename(f);
-    const prefix = RESTORE_PREFIXES.find((p) => base.startsWith(p));
-    if (!prefix) continue;
-    const validatedName = base.slice(prefix.length);
-    if (validatedName.includes('..')) continue;
+    if (base.includes('..')) continue;
     const src = path.join(rejectedDir, base);
-    if (fs.existsSync(src)) {
-      try {
-        fs.renameSync(src, path.join(validatedDir, validatedName));
-        restored.push(validatedName);
-      } catch (_) {}
-    }
+    if (!fs.existsSync(src)) continue;
+    const prefix = RESTORE_PREFIXES.find((p) => base.startsWith(p));
+    const validatedName = prefix ? base.slice(prefix.length) : base;
+    try {
+      fs.renameSync(src, path.join(validatedDir, validatedName));
+      restored.push(validatedName);
+    } catch (_) {}
   }
   res.json({ restored });
 });

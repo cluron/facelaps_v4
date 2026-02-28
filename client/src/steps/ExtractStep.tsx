@@ -110,10 +110,10 @@ export function ExtractStep({ onNext }: Props) {
   const rejected = total - (matched ?? 0);
 
   return (
-    <section className="step-content extract-step">
-      <h2 className="section-title">Extraction des visages</h2>
+    <section className="step-content extract-step" aria-labelledby="step-extract-title">
+      <h2 id="step-extract-title" className="section-title">Extraction des visages</h2>
       <p className="step-desc">
-        Détection dans le navigateur, comparaison aux templates, alignement (yeux fixes) et recadrage. Les refusées sont copiées dans <strong>2_rejected</strong>.
+        Ajustez les options ci‑dessous puis lancez l’extraction. Détection et comparaison au template dans le navigateur, alignement et recadrage. Les photos non retenues sont copiées dans <strong>2_rejected</strong>.
       </p>
 
       {running && (

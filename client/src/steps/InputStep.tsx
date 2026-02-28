@@ -41,10 +41,10 @@ export function InputStep({ onNext }: Props) {
   const restCount = files.length - PREVIEW_MAX;
 
   return (
-    <section className="step-content">
-      <h2 className="section-title">Photos à traiter</h2>
-      <p className="message info">
-        Les photos dans lesquelles chercher le visage des templates. Après extraction, les visages reconnus seront alignés, recadrés et enregistrés dans <strong>3_validated</strong>.
+    <section className="step-content" aria-labelledby="step-input-title">
+      <h2 id="step-input-title" className="section-title">Photos à traiter</h2>
+      <p className="step-intro">
+        Ajoutez les photos dans lesquelles chercher le visage de référence. Après extraction, les visages reconnus seront alignés, recadrés et enregistrés dans <strong>3_validated</strong>.
       </p>
 
       <UploadZone
@@ -63,7 +63,7 @@ export function InputStep({ onNext }: Props) {
         <p className="loading-line"><span className="loading" /> Chargement…</p>
       ) : files.length === 0 ? (
         <div className="empty-state">
-          <p>Aucune image. Ajoutez les photos à analyser ci‑dessus.</p>
+          <p>Aucune photo à traiter. Ajoutez des images ci‑dessus pour lancer l’extraction.</p>
         </div>
       ) : (
         <>
@@ -92,9 +92,10 @@ export function InputStep({ onNext }: Props) {
       )}
 
       <div className="actions">
-        <button type="button" className="btn-primary" onClick={onNext} disabled={files.length === 0}>
+        <button type="button" className="btn-primary" onClick={onNext} disabled={files.length === 0} aria-describedby={files.length === 0 ? 'input-next-hint' : undefined}>
           Lancer l’extraction →
         </button>
+        {files.length === 0 && <p id="input-next-hint" className="muted actions-hint">Ajoutez au moins une photo pour continuer.</p>}
       </div>
     </section>
   );

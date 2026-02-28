@@ -1,14 +1,17 @@
 :root {
   --bg: #0d0d0f;
+  --bg-subtle: #131316;
   --surface: #16161a;
   --border: #2a2a2e;
   --text: #e4e4e7;
   --muted: #71717a;
   --accent: #7c3aed;
   --accent-hover: #8b5cf6;
+  --primary: #7c3aed;
   --success: #22c55e;
   --danger: #ef4444;
-  --radius: 12px;
+  --radius: 10px;
+  --radius-sm: 6px;
 }
 
 * {
@@ -43,6 +46,14 @@ button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 input, select {

@@ -31,9 +31,13 @@ function getRejectReasonFromFilename(filename: string): RejectReasonId | null {
   return null;
 }
 
-const RESTORABLE_PREFIXES = ['face_turned_', 'low_quality_'];
+const RESTORABLE_PREFIXES = ['face_turned_', 'low_quality_', 'no_match_'];
+/** Fichiers non récupérables : copies de référence (sans crop) en rejected. */
+const NON_RESTORABLE_PREFIXES = ['no_face_input_', 'no_match_input_'];
 function isRestorableRejected(filename: string): boolean {
-  return RESTORABLE_PREFIXES.some((p) => filename.startsWith(p));
+  if (NON_RESTORABLE_PREFIXES.some((p) => filename.startsWith(p))) return false;
+  if (filename.startsWith('input_')) return false; // ancien format
+  return true; // crops (reason_xxx) et rejets manuels (nom inchangé) sont récupérables
 }
 
 export function ReviewStep({ onNext }: Props) {
@@ -75,22 +79,35 @@ export function ReviewStep({ onNext }: Props) {
     setLightboxIndex((i) => (i + 1) % files.length);
   }, [files.length]);
 
-  const load = useCallback(() => {
+  const load = useCallback((): Promise<{ validatedFiles: string[]; rejectedFiles: string[] }> => {
     setLoading(true);
-    Promise.all([
-      fetch('/api/folders/validated').then((r) => r.json()),
-      fetch('/api/folders/rejected').then((r) => r.json()),
+    const safeJson = (r: Response) => (r.ok ? r.json() : Promise.resolve({ files: [] }));
+    return Promise.all([
+      fetch('/api/folders/validated').then(safeJson).catch(() => ({ files: [] })),
+      fetch('/api/folders/rejected').then(safeJson).catch(() => ({ files: [] })),
     ])
       .then(([validatedData, rejectedData]) => {
-        setValidatedFiles(validatedData.files ?? []);
-        setRejectedFiles(rejectedData.files ?? []);
+        const validated = validatedData?.files ?? [];
+        const rejected = rejectedData?.files ?? [];
+        setValidatedFiles(validated);
+        setRejectedFiles(rejected);
         setMarked(new Set());
         setLoading(false);
+        return { validatedFiles: validated, rejectedFiles: rejected };
       })
-      .catch(() => setLoading(false));
+      .catch(() => {
+        setLoading(false);
+        setValidatedFiles([]);
+        setRejectedFiles([]);
+        return { validatedFiles: [], rejectedFiles: [] };
+      });
   }, []);
 
-  useEffect(() => load(), [load]);
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (files.length === 0 && lightboxOpen) setLightboxOpen(false);
+  }, [files.length, lightboxOpen]);
 
   const toggle = useCallback((f: string) => {
     setMarked((prev) => {
@@ -203,16 +220,73 @@ export function ReviewStep({ onNext }: Props) {
     };
   }, [toggle]);
 
+  const lightboxRejectCurrent = useCallback(async () => {
+    if (activeTab !== 'validated' || files.length === 0) return;
+    const current = files[lightboxIndex];
+    const currentIndex = lightboxIndex;
+    setRejecting(true);
+    try {
+      await fetch('/api/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: [current] }),
+      });
+      const data = await load();
+      setMarked((prev) => {
+        const next = new Set(prev);
+        next.delete(current);
+        return next;
+      });
+      if (data.validatedFiles.length === 0) closeLightbox();
+      else setLightboxIndex((i) => Math.min(currentIndex, data.validatedFiles.length - 1));
+    } finally {
+      setRejecting(false);
+    }
+  }, [activeTab, files, lightboxIndex, load, closeLightbox]);
+
+  const lightboxRestoreCurrent = useCallback(async () => {
+    if (activeTab !== 'rejected' || files.length === 0) return;
+    const current = files[lightboxIndex];
+    if (typeof current !== 'string' || !isRestorableRejected(current)) return;
+    const currentIndex = lightboxIndex;
+    setRestoring(true);
+    try {
+      await fetch('/api/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: [current] }),
+      });
+      const data = await load();
+      setMarked((prev) => {
+        const next = new Set(prev);
+        next.delete(current);
+        return next;
+      });
+      const nextList = filterRejectReason
+        ? data.rejectedFiles.filter((f) => getRejectReasonFromFilename(f) === filterRejectReason)
+        : data.rejectedFiles;
+      if (nextList.length === 0) closeLightbox();
+      else setLightboxIndex((i) => Math.min(currentIndex, nextList.length - 1));
+    } finally {
+      setRestoring(false);
+    }
+  }, [activeTab, files, lightboxIndex, filterRejectReason, load, closeLightbox]);
+
   useEffect(() => {
     if (!lightboxOpen) return;
     const handleKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeLightbox();
       else if (e.key === 'ArrowLeft') goPrev();
       else if (e.key === 'ArrowRight') goNext();
+      else if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        if (activeTab === 'validated' && files.length > 0) lightboxRejectCurrent();
+        else if (activeTab === 'rejected') lightboxRestoreCurrent();
+      }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [lightboxOpen, closeLightbox, goPrev, goNext]);
+  }, [lightboxOpen, closeLightbox, goPrev, goNext, activeTab, files.length, lightboxRejectCurrent, lightboxRestoreCurrent]);
 
   const handleCardKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
     if (e.key === ' ' || e.key === 'Enter') {
@@ -258,63 +332,75 @@ export function ReviewStep({ onNext }: Props) {
   }
 
   return (
-    <section className="step-content">
-      <h2 className="section-title">Vérification des visages extraits</h2>
-      <p className="message info">
-        <strong>Validés</strong> : cliquez ou sélectionnez à la souris les images à retirer du timelapse, puis « Supprimer la sélection » (elles iront dans 2_rejected).<br />
-        <strong>Rejetés</strong> : les visages extraits mais refusés (pose/qualité) peuvent être récupérés vers 3_validated. Les <code>input_xxx</code> sont les photos d’origine sans visage reconnu et ne sont pas récupérables.<br />
-        <strong>Vue agrandie</strong> : double-clic sur une image pour l’ouvrir en grand ; <kbd>←</kbd> <kbd>→</kbd> pour naviguer ; <kbd>Échap</kbd> pour fermer.
-      </p>
+    <section className="step-content" aria-labelledby="step-review-title">
+      <h2 id="step-review-title" className="section-title">Vérification des visages</h2>
+      <div className="message info review-instructions" role="region" aria-label="Instructions">
+        <p><strong>Validés</strong> — Clic ou sélection à la souris pour marquer les images à retirer du timelapse, puis « Supprimer la sélection ».</p>
+        <p><strong>Rejetés</strong> — Les visages extraits mais refusés (sans correspondance, pose, qualité) peuvent être récupérés vers 3_validated. Seules les photos sans visage détecté ne sont pas récupérables.</p>
+        <p><strong>Vue agrandie</strong> — Double-clic sur une image ; <kbd>←</kbd> <kbd>→</kbd> pour naviguer ; <kbd>R</kbd> ou le bouton : « Rejeter » (Validés) ou « Récupérer » (Rejetés), puis image suivante ; <kbd>Échap</kbd> pour fermer.</p>
+      </div>
 
-      <div className="review-tabs">
+      <div className="review-tabs" role="tablist" aria-label="Validés ou Rejetés">
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'validated'}
+          aria-controls="review-panel"
+          id="tab-validated"
           className={`review-tab ${activeTab === 'validated' ? 'active' : ''}`}
           onClick={() => setActiveTab('validated')}
         >
-          Validés (3_validated) — {validatedFiles.length}
+          Validés — {validatedFiles.length}
         </button>
         <button
           type="button"
+          role="tab"
+          aria-selected={activeTab === 'rejected'}
+          aria-controls="review-panel"
+          id="tab-rejected"
           className={`review-tab ${activeTab === 'rejected' ? 'active' : ''}`}
           onClick={() => setActiveTab('rejected')}
         >
-          Rejetés (2_rejected) — {rejectedFiles.length}
+          Rejetés — {rejectedFiles.length}
         </button>
       </div>
 
       <div className="toolbar">
         {activeTab === 'rejected' && rejectedFiles.length > 0 && (
-          <div className="reject-filters">
-            <span className="reject-filters-label">Filtrer :</span>
-            <button
-              type="button"
-              className={`reject-filter-btn ${!filterRejectReason ? 'active' : ''}`}
-              onClick={() => setFilterRejectReason('')}
-            >
-              Tous ({rejectedFiles.length})
-            </button>
-            {(['no_face', 'no_match', 'face_turned', 'low_quality'] as const).map((reason) => {
-              const count = rejectedFiles.filter((f) => getRejectReasonFromFilename(f) === reason).length;
-              if (count === 0) return null;
-              return (
-                <button
-                  key={reason}
-                  type="button"
-                  className={`reject-filter-btn ${filterRejectReason === reason ? 'active' : ''}`}
-                  onClick={() => setFilterRejectReason(reason)}
-                >
-                  {REJECT_REASON_LABELS[reason]} ({count})
-                </button>
-              );
-            })}
-          </div>
+          <>
+            <div className="reject-filters">
+              <span className="reject-filters-label">Filtrer :</span>
+              <button
+                type="button"
+                className={`reject-filter-btn ${!filterRejectReason ? 'active' : ''}`}
+                onClick={() => setFilterRejectReason('')}
+              >
+                Tous ({rejectedFiles.length})
+              </button>
+              {(['no_face', 'no_match', 'face_turned', 'low_quality'] as const).map((reason) => {
+                const count = rejectedFiles.filter((f) => getRejectReasonFromFilename(f) === reason).length;
+                if (count === 0) return null;
+                return (
+                  <button
+                    key={reason}
+                    type="button"
+                    className={`reject-filter-btn ${filterRejectReason === reason ? 'active' : ''}`}
+                    onClick={() => setFilterRejectReason(reason)}
+                  >
+                    {REJECT_REASON_LABELS[reason]} ({count})
+                  </button>
+                );
+              })}
+            </div>
+            <span className="toolbar-sep" aria-hidden />
+          </>
         )}
-        <button type="button" className="btn-ghost" onClick={load} title="Rafraîchir">
+        <button type="button" className="btn-ghost" onClick={load} title="Rafraîchir la liste">
           ↻ Rafraîchir
         </button>
       </div>
 
+      <div id="review-panel" role="tabpanel" aria-labelledby={activeTab === 'validated' ? 'tab-validated' : 'tab-rejected'}>
       {files.length === 0 ? (
         <div className="empty-state">
           <p>
@@ -379,7 +465,7 @@ export function ReviewStep({ onNext }: Props) {
             })()}
           </div>
 
-          {lightboxOpen && files.length > 0 && (
+          {lightboxOpen && files.length > 0 && lightboxIndex >= 0 && lightboxIndex < files.length && (
             <div
               className="lightbox-overlay"
               role="dialog"
@@ -402,6 +488,34 @@ export function ReviewStep({ onNext }: Props) {
                 <button type="button" className="lightbox-nav lightbox-next" onClick={(e) => { e.stopPropagation(); goNext(); }} aria-label="Image suivante">
                   ›
                 </button>
+                {activeTab === 'validated' && (
+                  <button
+                    type="button"
+                    className="lightbox-reject-btn"
+                    onClick={(e) => { e.stopPropagation(); lightboxRejectCurrent(); }}
+                    disabled={rejecting}
+                    aria-label="Rejeter cette image (R)"
+                    title="Rejeter (R)"
+                  >
+                    {rejecting ? <><span className="loading" /> Envoi…</> : 'Rejeter (R)'}
+                  </button>
+                )}
+                {activeTab === 'rejected' && (() => {
+                  const current = files[lightboxIndex];
+                  const canRestore = typeof current === 'string' && isRestorableRejected(current);
+                  return (
+                    <button
+                      type="button"
+                      className="lightbox-restore-btn"
+                      onClick={(e) => { e.stopPropagation(); lightboxRestoreCurrent(); }}
+                      disabled={restoring || !canRestore}
+                      aria-label={canRestore ? 'Récupérer cette image (R)' : 'Cette image n’est pas récupérable'}
+                      title={canRestore ? 'Récupérer (R)' : 'Cette image (copie sans visage) n’est pas récupérable'}
+                    >
+                      {restoring ? <><span className="loading" /> Envoi…</> : 'Récupérer (R)'}
+                    </button>
+                  );
+                })()}
                 <p className="lightbox-caption">
                   {files[lightboxIndex]} <span className="lightbox-counter">({lightboxIndex + 1} / {files.length})</span>
                 </p>
@@ -416,16 +530,17 @@ export function ReviewStep({ onNext }: Props) {
               </button>
             )}
             {marked.size > 0 && activeTab === 'rejected' && (
-              <button type="button" className="btn-primary" onClick={confirmRestore} disabled={restoring || restorableCount === 0} title={restorableCount === 0 ? 'Seules les images extraites (crops) sont récupérables' : ''}>
+              <button type="button" className="btn-primary" onClick={confirmRestore} disabled={restoring || restorableCount === 0} title={restorableCount === 0 ? 'Les copies « sans visage » ne sont pas récupérables' : ''}>
                 {restoring ? <span className="loading" /> : null} Récupérer la sélection ({restorableCount})
               </button>
             )}
             <button type="button" className="btn-primary" onClick={onNext}>
-              Créer la vidéo →
+              Passer à la vidéo →
             </button>
           </div>
         </>
       )}
+      </div>
     </section>
   );
 }

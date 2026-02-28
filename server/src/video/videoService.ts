@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import exifr from 'exifr';
 import { PATHS } from '../config.js';
 
 const execFileAsync = promisify(execFile);
@@ -11,9 +12,27 @@ function getFfmpegPath(): string {
   return 'ffmpeg';
 }
 
+/** Timestamp de tri : EXIF (DateTimeOriginal / CreateDate) > mtime > 0 (nom en secours). */
+async function getSortTime(filePath: string): Promise<number> {
+  try {
+    const exif = await exifr.parse(filePath, { pick: ['DateTimeOriginal', 'CreateDate'] });
+    const d = exif?.DateTimeOriginal ?? exif?.CreateDate;
+    if (d instanceof Date && !Number.isNaN(d.getTime())) return d.getTime();
+    if (typeof d === 'string') return new Date(d).getTime();
+  } catch {
+    /* pas d'EXIF ou erreur lecture */
+  }
+  try {
+    const stat = fs.statSync(filePath);
+    return stat.mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
 /**
- * Crée une vidéo à partir des images du dossier validated (ordre alphabétique),
- * avec crossfade entre les images.
+ * Crée une vidéo à partir des images du dossier validated.
+ * Ordre chronologique : date EXIF (DateTimeOriginal/CreateDate) > mtime > nom de fichier.
  * @param validatedDir Dossier contenant les images
  * @param outputDir Dossier de sortie pour la vidéo
  * @param fps Images par seconde (ex: 7)
@@ -24,12 +43,22 @@ export async function createVideo(
   outputDir: string,
   fps: number
 ): Promise<string> {
-  const files = fs.readdirSync(validatedDir)
-    .filter(f => /\.(jpe?g|png|webp)$/i.test(f))
-    .sort()
-    .map(f => path.join(validatedDir, f));
+  const filenames = fs.readdirSync(validatedDir)
+    .filter(f => /\.(jpe?g|png|webp)$/i.test(f));
 
-  if (files.length === 0) throw new Error('Aucune image dans le dossier validé.');
+  if (filenames.length === 0) throw new Error('Aucune image dans le dossier validé.');
+
+  const withTime = await Promise.all(
+    filenames.map(async (f) => {
+      const fullPath = path.join(validatedDir, f);
+      const sortTime = await getSortTime(fullPath);
+      return { fullPath, filename: f, sortTime };
+    })
+  );
+
+  const files = withTime
+    .sort((a, b) => a.sortTime - b.sortTime || a.filename.localeCompare(b.filename))
+    .map((x) => x.fullPath);
 
   fs.mkdirSync(outputDir, { recursive: true });
   const listPath = path.join(outputDir, 'list.txt');

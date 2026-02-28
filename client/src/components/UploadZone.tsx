@@ -61,7 +61,7 @@ export function UploadZone({ folder, accept = 'image/jpeg,image/png,image/webp,.
           <span className="upload-zone-text">{label}</span>
         )}
       </div>
-      {error && <p className="message error">{error}</p>}
+      {error && <p className="message error" role="alert">{error}</p>}
     </div>
   );
 }

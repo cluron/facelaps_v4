@@ -36,10 +36,10 @@ export function TemplatesStep({ onNext }: Props) {
   };
 
   return (
-    <section className="step-content">
-      <h2 className="section-title">Photos de référence (templates)</h2>
-      <p className="message info">
-        Quelques photos du visage à reconnaître (même personne, face de préférence). Vous pouvez les déposer ici ou les placer dans le dossier <strong>0_template_photos</strong>.
+    <section className="step-content" aria-labelledby="step-templates-title">
+      <h2 id="step-templates-title" className="section-title">Photos de référence</h2>
+      <p className="step-intro">
+        Définissez le visage à reconnaître : ajoutez une ou plusieurs photos de la même personne (de face de préférence). Glissez-déposez ici ou utilisez le dossier <strong>0_template_photos</strong>.
       </p>
 
       <UploadZone
@@ -58,7 +58,7 @@ export function TemplatesStep({ onNext }: Props) {
         <p className="loading-line"><span className="loading" /> Chargement…</p>
       ) : files.length === 0 ? (
         <div className="empty-state">
-          <p>Aucune image. Ajoutez au moins une photo de référence ci‑dessus.</p>
+          <p>Aucune photo de référence. Ajoutez au moins une image ci‑dessus pour continuer.</p>
         </div>
       ) : (
         <div className="card-grid">
@@ -82,9 +82,10 @@ export function TemplatesStep({ onNext }: Props) {
       )}
 
       <div className="actions">
-        <button type="button" className="btn-primary" onClick={onNext} disabled={files.length === 0}>
-          Continuer →
+        <button type="button" className="btn-primary" onClick={onNext} disabled={files.length === 0} aria-describedby={files.length === 0 ? 'templates-next-hint' : undefined}>
+          Continuer vers les photos source →
         </button>
+        {files.length === 0 && <p id="templates-next-hint" className="muted actions-hint">Ajoutez au moins une photo de référence pour débloquer cette étape.</p>}
       </div>
     </section>
   );
