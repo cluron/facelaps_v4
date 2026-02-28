@@ -1,17 +1,22 @@
-# Dossiers de données
-template_photos/
+# Données pipeline
+0_template_photos/
 1_input/
 2_rejected/
 3_validated/
 4_video/
 
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
+# Node
+node_modules/
+.env.development.local
+client/dist/
+server/dist/
 .env
+
+# Python (projet migré en Node/TS — ne pas réintroduire)
+__pycache__/
 venv/
-ENV/
+*.pyc
+.Python
 
 # IDE
 .vscode/
