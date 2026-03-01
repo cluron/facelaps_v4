@@ -15,22 +15,23 @@ const PAGE_SIZE = 24;
 
 type TabId = 'validated' | 'rejected';
 
-type RejectReasonId = 'no_face' | 'no_match' | 'face_turned' | 'low_quality';
+type RejectReasonId = 'no_face' | 'no_match' | 'face_turned' | 'low_quality' | 'manual';
 
 const REJECT_REASON_LABELS: Record<RejectReasonId, string> = {
   no_face: 'Sans visage',
   no_match: 'Sans correspondance',
   face_turned: 'Visage tourné',
   low_quality: 'Qualité insuffisante',
+  manual: 'Rejet manuel',
 };
 
-function getRejectReasonFromFilename(filename: string): RejectReasonId | null {
+function getRejectReasonFromFilename(filename: string): RejectReasonId {
   if (filename.startsWith('no_face_input_')) return 'no_face';
   if (filename.startsWith('no_match_')) return 'no_match'; // crop (no_match_xxx.jpg) ou original (no_match_input_xxx)
   if (filename.startsWith('face_turned_')) return 'face_turned';
   if (filename.startsWith('low_quality_')) return 'low_quality';
   if (filename.startsWith('input_')) return 'no_face'; // ancien format
-  return null;
+  return 'manual'; // rejet depuis l’onglet Validés (pas de préfixe)
 }
 
 const RESTORABLE_PREFIXES = ['face_turned_', 'low_quality_', 'no_match_'];
@@ -403,7 +404,7 @@ export function ReviewStep({ onNext }: Props) {
               >
                 Tous ({rejectedFiles.length})
               </button>
-              {(['no_face', 'no_match', 'face_turned', 'low_quality'] as const).map((reason) => {
+              {(['no_face', 'no_match', 'face_turned', 'low_quality', 'manual'] as const).map((reason) => {
                 const count = rejectedFiles.filter((f) => getRejectReasonFromFilename(f) === reason).length;
                 if (count === 0) return null;
                 return (

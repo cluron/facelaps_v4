@@ -351,19 +351,23 @@
 }
 
 .thumb-badge.reason-no_face {
-  background: #6b7280;
+  background: #64748b; /* slate — sans visage */
 }
 
 .thumb-badge.reason-no_match {
-  background: #92400e;
+  background: #d97706; /* amber — sans correspondance */
 }
 
 .thumb-badge.reason-face_turned {
-  background: #b45309;
+  background: #0d9488; /* teal — visage tourné */
 }
 
 .thumb-badge.reason-low_quality {
-  background: #be123c;
+  background: #dc2626; /* red — qualité insuffisante */
+}
+
+.thumb-badge.reason-manual {
+  background: #7c3aed; /* violet — rejet manuel */
 }
 
 .thumb-delete {
