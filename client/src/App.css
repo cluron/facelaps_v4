@@ -919,6 +919,12 @@
   margin: 0;
 }
 
+.extract-live-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: normal;
+}
+
 .extract-result {
   margin-top: 1rem;
   padding-top: 1rem;

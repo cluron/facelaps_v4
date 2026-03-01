@@ -81,7 +81,14 @@ export function ExtractStep({ onNext }: Props) {
       form.append('validatedSourceNames', JSON.stringify(validated.map((v) => v.sourceName)));
 
       const completeRes = await fetch('/api/extract/complete', { method: 'POST', body: form });
-      const completeData = await completeRes.json().catch(() => ({}));
+      let completeData: { error?: string; validated?: string[] } = {};
+      try {
+        const text = await completeRes.text();
+        if (text) completeData = JSON.parse(text);
+      } catch {
+        setError('Réponse du serveur invalide (connexion interrompue ?). Réessayez avec moins d’images ou une connexion plus stable.');
+        return;
+      }
       if (!completeRes.ok) {
         setError(completeData?.error ?? `Erreur ${completeRes.status}`);
         return;
@@ -99,7 +106,12 @@ export function ExtractStep({ onNext }: Props) {
         )
       );
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Erreur réseau ou extraction');
+      const msg = e instanceof Error ? e.message : '';
+      const friendly =
+        /Unexpected end of JSON|socket hang up|Failed to fetch|NetworkError|Load failed/i.test(msg)
+          ? 'Connexion interrompue pendant l’envoi des résultats. Réessayez (moins d’images ou attendez que le serveur soit prêt).'
+          : msg || 'Erreur réseau ou extraction';
+      setError(friendly);
     } finally {
       setRunning(false);
       setProgress(null);
@@ -124,6 +136,7 @@ export function ExtractStep({ onNext }: Props) {
               Validés : <strong>{liveResults.filter((r) => r.ok).length}</strong>
               {' · '}
               Rejetés : <strong>{liveResults.filter((r) => !r.ok).length}</strong>
+              <span className="extract-live-hint"> — Enregistrement dans les dossiers à la fin uniquement.</span>
             </div>
           )}
         </div>

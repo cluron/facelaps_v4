@@ -12,7 +12,11 @@ export default defineConfig(({ mode }) => {
       port: 5173,
       strictPort: false,
       proxy: {
-        '/api': { target: `http://localhost:${apiPort}`, changeOrigin: true },
+        '/api': {
+          target: `http://localhost:${apiPort}`,
+          changeOrigin: true,
+          timeout: 300000, // 5 min pour uploads lourds (extract/complete)
+        },
         '/files': { target: `http://localhost:${apiPort}`, changeOrigin: true },
         '/models': { target: `http://localhost:${apiPort}`, changeOrigin: true },
       },

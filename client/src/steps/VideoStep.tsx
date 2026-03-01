@@ -15,7 +15,9 @@ export function VideoStep() {
   const [loadingVideos, setLoadingVideos] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [imageCount, setImageCount] = useState<number | null>(null);
+  const [videoWarning, setVideoWarning] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<'chronological' | 'color' | 'similarity'>('chronological');
+  const [crossfadeDuration, setCrossfadeDuration] = useState(0);
 
   const loadVideos = useCallback(() => {
     setLoadingVideos(true);
@@ -35,16 +37,18 @@ export function VideoStep() {
     setError(null);
     setVideoPath(null);
     setImageCount(null);
+    setVideoWarning(null);
     try {
       const res = await fetch('/api/make-video', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fps, sortOrder }),
+        body: JSON.stringify({ fps, sortOrder, crossfadeDuration }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
       setVideoPath(data.path);
       setImageCount(data.imageCount ?? null);
+      if (data.warning) setVideoWarning(data.warning);
       loadVideos();
     } catch (e: any) {
       setError(e?.message ?? 'Erreur');
@@ -101,7 +105,10 @@ export function VideoStep() {
           aria-selected={activeTab === 'generate'}
           id="tab-video-generate"
           className={`content-tab ${activeTab === 'generate' ? 'active' : ''}`}
-          onClick={() => setActiveTab('generate')}
+          onClick={() => {
+            if (activeTab === 'generate' && !making) makeVideo();
+            else setActiveTab('generate');
+          }}
           aria-controls="video-panel-generate"
         >
           Génération vidéo
@@ -160,6 +167,24 @@ export function VideoStep() {
                 className="input-narrow"
               />
             </label>
+            <label className="label-inline">
+              <span>Fondu entre images (s)</span>
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.05}
+                value={crossfadeDuration}
+                onChange={(e) => setCrossfadeDuration(Math.max(0, Number(e.target.value) || 0))}
+                className="input-narrow"
+                title="0 = coupure nette ; 0,1–0,5 = fondu enchaîné"
+              />
+            </label>
+            <span className="muted form-hint" style={{ flexBasis: '100%' }}>
+              {crossfadeDuration > 0 ? `Fondu de ${crossfadeDuration} s entre chaque image.` : 'Coupure nette entre les images.'}
+            </span>
+          </div>
+          <div className="form-row form-row-video">
             <button type="button" className="btn-primary" onClick={makeVideo} disabled={making}>
               {making ? <><span className="loading" /> Génération…</> : 'Générer la vidéo'}
             </button>
@@ -173,6 +198,7 @@ export function VideoStep() {
               <a href={`/files/video/${encodeURIComponent(lastVideoName!)}`} target="_blank" rel="noopener noreferrer">
                 Voir / télécharger
               </a>
+              {videoWarning && <p className="muted" style={{ marginTop: '0.5rem', marginBottom: 0 }}>{videoWarning}</p>}
             </div>
           )}
         </div>

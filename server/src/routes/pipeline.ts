@@ -95,14 +95,14 @@ router.post('/extract/complete', (req: Request, res: Response, next: NextFunctio
 
   const storage = multer.memoryStorage();
   const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
-  upload.fields([
-    { name: 'validated', maxCount: 500 },
-    { name: 'rejectedCrop', maxCount: 500 },
-  ])(req, res, (err: any) => {
+  // .any() pour accepter aussi les champs texte 'rejected' et 'validatedSourceNames' (sinon "Unexpected field")
+  upload.any()(req, res, (err: any) => {
     if (err) return res.status(400).json({ error: err?.message ?? 'Upload failed' });
-    const allFiles = (req as any).files as { validated?: Express.Multer.File[]; rejectedCrop?: Express.Multer.File[] } | undefined;
-    const validatedFiles = allFiles?.validated ?? [];
-    const rejectedCropFiles = allFiles?.rejectedCrop ?? [];
+    const files = (req as any).files as Express.Multer.File[] | undefined;
+    const allUploaded = files ?? [];
+    if (allUploaded.length > 5000) return res.status(400).json({ error: 'Trop de fichiers (max 5000)' });
+    const validatedFiles = allUploaded.filter((f) => f.fieldname === 'validated');
+    const rejectedCropFiles = allUploaded.filter((f) => f.fieldname === 'rejectedCrop');
     const rejectedRaw = (req as any).body?.rejected;
     const validatedSourceRaw = (req as any).body?.validatedSourceNames;
     let rejectedCopyFromInput: { sourceName: string; reason: string }[] = [];
@@ -197,17 +197,18 @@ router.post('/restore', (req, res) => {
   res.json({ restored });
 });
 
-/** Créer la vidéo à partir du dossier validated. Body: { fps, sortOrder?: 'chronological'|'color'|'similarity' } */
+/** Créer la vidéo à partir du dossier validated. Body: { fps, sortOrder?, crossfadeDuration? } */
 router.post('/make-video', async (req, res) => {
   const fps = Number(req.body?.fps) || 7;
   const sortOrder = ['chronological', 'color', 'similarity'].includes(req.body?.sortOrder)
     ? req.body.sortOrder
     : 'chronological';
+  const crossfadeDuration = Math.max(0, Number(req.body?.crossfadeDuration) || 0);
   try {
     const validatedDir = dir('validated');
     const outputDir = dir('video');
-    const { path: outPath, imageCount } = await createVideo(validatedDir, outputDir, fps, sortOrder);
-    res.json({ path: outPath, imageCount });
+    const { path: outPath, imageCount, warning } = await createVideo(validatedDir, outputDir, fps, sortOrder, crossfadeDuration);
+    res.json({ path: outPath, imageCount, ...(warning && { warning }) });
   } catch (e: any) {
     res.status(500).json({ error: e?.message ?? 'Video creation failed' });
   }

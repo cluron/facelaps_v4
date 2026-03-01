@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p server && vite build",
+    "build:server": "tsc -p server",
     "dev": "node scripts/dev.js",
     "dev:server": "tsx watch server/src/index.ts",
+    "dev:server:compiled": "node --watch server/dist/index.js",
     "dev:client": "vite",
     "start": "node server/dist/index.js",
     "prestart": "npm run build",

@@ -126,20 +126,25 @@ function sortBySimilarity(
   return ordered;
 }
 
+const XFADE_FPS = 25; // framerate pour le crossfade (plus de frames = fondu plus fluide)
+const XFADE_SCALE = '1280:720'; // résolution commune pour xfade (même taille requise)
+
 /**
  * Crée une vidéo à partir des images du dossier validated.
  * @param validatedDir Dossier contenant les images
  * @param outputDir Dossier de sortie pour la vidéo
  * @param fps Images par seconde (ex: 7)
- * @param sortOrder chronological (EXIF/mtime/nom) | color (teinte) | similarity (transition douce)
+ * @param sortOrder chronological | color | similarity
+ * @param crossfadeDuration Durée du fondu entre deux images en secondes (0 = coupure nette)
  * @returns Chemin du fichier vidéo créé et nombre d’images utilisées
  */
 export async function createVideo(
   validatedDir: string,
   outputDir: string,
   fps: number,
-  sortOrder: VideoSortOrder = 'chronological'
-): Promise<{ path: string; imageCount: number }> {
+  sortOrder: VideoSortOrder = 'chronological',
+  crossfadeDuration: number = 0
+): Promise<{ path: string; imageCount: number; warning?: string }> {
   const filenames = listValidatedImages(validatedDir);
 
   if (filenames.length === 0) throw new Error('Aucune image dans le dossier validé.');
@@ -170,16 +175,11 @@ export async function createVideo(
       : sortBySimilarity(withRgb);
   }
 
-  fs.mkdirSync(outputDir, { recursive: true });
-  const listPath = path.join(outputDir, 'list.txt');
-  // Chaque image doit durer 1/fps seconde. Le demuxer concat n'applique pas -r aux images :
-  // on met "duration 1/fps" dans la liste pour obtenir une vidéo de (nb images / fps) secondes.
   const durationSec = 1 / fps;
-  const listContent = files
-    .map(f => `file '${f.replace(/'/g, "'\\''")}'\nduration ${durationSec}`)
-    .join('\n');
-  fs.writeFileSync(listPath, listContent, 'utf8');
+  const cf = Math.max(0, Math.min(crossfadeDuration, durationSec * 0.8)); // cap à 80 % du temps par image
+  let useXfade = cf > 0.01 && files.length >= 2;
 
+  fs.mkdirSync(outputDir, { recursive: true });
   const now = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
@@ -189,20 +189,71 @@ export async function createVideo(
   const outPath = path.join(outputDir, outName);
   const ffmpeg = getFfmpegPath();
 
-  // mpeg4 pour compatibilité avec ffmpeg sans libx264 (ex. anciennes installs macOS)
-  await execFileAsync(ffmpeg, [
-    '-y',
-    '-f', 'concat',
-    '-safe', '0',
-    '-i', listPath,
-    '-c:v', 'mpeg4',
-    '-q:v', '3',
-    '-pix_fmt', 'yuv420p',
-    outPath,
-  ], { maxBuffer: 10 * 1024 * 1024 });
-
-  try { fs.unlinkSync(listPath); } catch { /* ignore */ }
-  return { path: outPath, imageCount: files.length };
+  let warning: string | undefined;
+  if (useXfade) {
+    // Pipeline avec xfade : chaque image en entrée, scale commun, puis enchaînement de fondus.
+    // On écrit le filtre dans un fichier pour éviter de dépasser la limite de longueur de la ligne de commande (ARG_MAX).
+    // Si la version de FFmpeg ne supporte pas xfade (< 4.3), on retombe sur la concat sans fondu.
+    const [w, h] = XFADE_SCALE.split(':');
+    const padFilter = `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black`;
+    const scaleParts: string[] = [];
+    for (let i = 0; i < files.length; i++) {
+      scaleParts.push(`[${i}:v]${padFilter}[v${i}]`);
+    }
+    const xfadeParts: string[] = [];
+    for (let k = 0; k < files.length - 1; k++) {
+      const inLeft = k === 0 ? '[v0]' : `[o${k - 1}]`;
+      const inRight = `[v${k + 1}]`;
+      const outLabel = k === files.length - 2 ? '[out]' : `[o${k}]`;
+      const offset = (k + 1) * (durationSec - cf);
+      xfadeParts.push(`${inLeft}${inRight}xfade=transition=fade:duration=${cf}:offset=${offset}${outLabel}`);
+    }
+    const filterComplex = scaleParts.join(';') + ';' + xfadeParts.join(';');
+    const totalDuration = files.length * durationSec - (files.length - 1) * cf;
+    const filterScriptPath = path.join(outputDir, `xfade_filter_${Date.now()}.txt`);
+    try {
+      fs.writeFileSync(filterScriptPath, filterComplex, 'utf8');
+      const args = ['-y'];
+      for (const f of files) {
+        args.push('-loop', '1', '-t', String(durationSec), '-framerate', String(XFADE_FPS), '-i', f);
+      }
+      args.push('-filter_complex_script', filterScriptPath, '-map', '[out]', '-t', String(totalDuration), '-c:v', 'mpeg4', '-q:v', '3', '-pix_fmt', 'yuv420p', '-r', String(XFADE_FPS), outPath);
+      await execFileAsync(ffmpeg, args, { maxBuffer: 50 * 1024 * 1024 });
+    } catch (err: any) {
+      const stderr = String(err?.stderr ?? err?.message ?? '');
+      const xfadeUnsupported = /No such filter:\s*['"]?xfade['"]?/i.test(stderr) || /Error initializing complex filters/i.test(stderr);
+      try {
+        fs.unlinkSync(filterScriptPath);
+      } catch { /* ignore */ }
+      if (xfadeUnsupported) {
+        warning = 'Fondu non disponible avec cette version de FFmpeg (4.3+ requis). Vidéo créée sans fondu.';
+        useXfade = false;
+        // on enchaîne avec le bloc concat ci‑dessous
+      } else {
+        throw err;
+      }
+    } finally {
+      if (useXfade) {
+        try {
+          fs.unlinkSync(filterScriptPath);
+        } catch { /* ignore */ }
+      }
+    }
+  }
+  if (!useXfade) {
+    const listPath = path.join(outputDir, 'list.txt');
+    const listContent = files
+      .map(f => `file '${f.replace(/'/g, "'\\''")}'\nduration ${durationSec}`)
+      .join('\n');
+    fs.writeFileSync(listPath, listContent, 'utf8');
+    await execFileAsync(ffmpeg, [
+      '-y', '-f', 'concat', '-safe', '0', '-i', listPath,
+      '-c:v', 'mpeg4', '-q:v', '3', '-pix_fmt', 'yuv420p',
+      outPath,
+    ], { maxBuffer: 10 * 1024 * 1024 });
+    try { fs.unlinkSync(listPath); } catch { /* ignore */ }
+  }
+  return { path: outPath, imageCount: files.length, ...(warning && { warning }) };
 }
 
 /**
