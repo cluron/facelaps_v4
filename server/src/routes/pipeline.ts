@@ -197,14 +197,17 @@ router.post('/restore', (req, res) => {
   res.json({ restored });
 });
 
-/** Créer la vidéo à partir du dossier validated. */
+/** Créer la vidéo à partir du dossier validated. Body: { fps, sortOrder?: 'chronological'|'color'|'similarity' } */
 router.post('/make-video', async (req, res) => {
   const fps = Number(req.body?.fps) || 7;
+  const sortOrder = ['chronological', 'color', 'similarity'].includes(req.body?.sortOrder)
+    ? req.body.sortOrder
+    : 'chronological';
   try {
     const validatedDir = dir('validated');
     const outputDir = dir('video');
-    const outPath = await createVideo(validatedDir, outputDir, fps);
-    res.json({ path: outPath });
+    const { path: outPath, imageCount } = await createVideo(validatedDir, outputDir, fps, sortOrder);
+    res.json({ path: outPath, imageCount });
   } catch (e: any) {
     res.status(500).json({ error: e?.message ?? 'Video creation failed' });
   }

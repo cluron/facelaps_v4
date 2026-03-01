@@ -11,6 +11,8 @@ function rectsOverlap(
   return !(a.right < b.left || a.left > b.right || a.bottom < b.top || a.top > b.bottom);
 }
 
+const PAGE_SIZE = 24;
+
 type TabId = 'validated' | 'rejected';
 
 type RejectReasonId = 'no_face' | 'no_match' | 'face_turned' | 'low_quality';
@@ -52,9 +54,11 @@ export function ReviewStep({ onNext }: Props) {
   const [selection, setSelection] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const isSelectingRef = useRef(false);
   const gridRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   const filteredRejectedFiles =
     activeTab === 'rejected' && filterRejectReason
@@ -62,6 +66,27 @@ export function ReviewStep({ onNext }: Props) {
       : rejectedFiles;
 
   const files = activeTab === 'validated' ? validatedFiles : filteredRejectedFiles;
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [activeTab, filterRejectReason, files.length]);
+
+  const displayedFiles = files.slice(0, visibleCount);
+  const hasMore = visibleCount < files.length;
+
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || files.length <= PAGE_SIZE) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting)
+          setVisibleCount((n) => Math.min(n + PAGE_SIZE, files.length));
+      },
+      { rootMargin: '200px', threshold: 0 }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [files.length, visibleCount]);
 
   const openLightbox = useCallback((index: number) => {
     if (index < 0 || index >= files.length) return;
@@ -288,23 +313,24 @@ export function ReviewStep({ onNext }: Props) {
     return () => window.removeEventListener('keydown', handleKey);
   }, [lightboxOpen, closeLightbox, goPrev, goNext, activeTab, files.length, lightboxRejectCurrent, lightboxRestoreCurrent]);
 
-  const handleCardKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
+  const handleCardKeyDown = useCallback((e: React.KeyboardEvent, globalIndex: number) => {
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
       e.stopPropagation();
-      openLightbox(index);
+      openLightbox(globalIndex);
       return;
     }
     const grid = gridRef.current;
     if (!grid) return;
-    const cards = grid.querySelectorAll<HTMLElement>('[data-index]');
+    const cards = Array.from(grid.querySelectorAll<HTMLElement>('[data-index]'));
+    const pos = cards.findIndex((c) => Number(c.getAttribute('data-index')) === globalIndex);
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
       e.preventDefault();
-      const next = cards[index + 1];
+      const next = cards[pos + 1];
       if (next) (next as HTMLButtonElement).focus();
     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
       e.preventDefault();
-      const prev = cards[index - 1];
+      const prev = cards[pos - 1];
       if (prev) (prev as HTMLButtonElement).focus();
     }
   }, [openLightbox]);
@@ -340,14 +366,14 @@ export function ReviewStep({ onNext }: Props) {
         <p><strong>Vue agrandie</strong> — Double-clic sur une image ; <kbd>←</kbd> <kbd>→</kbd> pour naviguer ; <kbd>R</kbd> ou le bouton : « Rejeter » (Validés) ou « Récupérer » (Rejetés), puis image suivante ; <kbd>Échap</kbd> pour fermer.</p>
       </div>
 
-      <div className="review-tabs" role="tablist" aria-label="Validés ou Rejetés">
+      <div className="content-tabs" role="tablist" aria-label="Validés ou Rejetés">
         <button
           type="button"
           role="tab"
           aria-selected={activeTab === 'validated'}
           aria-controls="review-panel"
           id="tab-validated"
-          className={`review-tab ${activeTab === 'validated' ? 'active' : ''}`}
+          className={`content-tab ${activeTab === 'validated' ? 'active' : ''}`}
           onClick={() => setActiveTab('validated')}
         >
           Validés — {validatedFiles.length}
@@ -358,7 +384,7 @@ export function ReviewStep({ onNext }: Props) {
           aria-selected={activeTab === 'rejected'}
           aria-controls="review-panel"
           id="tab-rejected"
-          className={`review-tab ${activeTab === 'rejected' ? 'active' : ''}`}
+          className={`content-tab ${activeTab === 'rejected' ? 'active' : ''}`}
           onClick={() => setActiveTab('rejected')}
         >
           Rejetés — {rejectedFiles.length}
@@ -400,6 +426,22 @@ export function ReviewStep({ onNext }: Props) {
         </button>
       </div>
 
+      <div className="actions actions-top">
+        {marked.size > 0 && activeTab === 'validated' && (
+          <button type="button" className="btn-danger" onClick={confirmReject} disabled={rejecting}>
+            {rejecting ? <span className="loading" /> : null} Supprimer la sélection ({marked.size})
+          </button>
+        )}
+        {marked.size > 0 && activeTab === 'rejected' && (
+          <button type="button" className="btn-primary" onClick={confirmRestore} disabled={restoring || restorableCount === 0} title={restorableCount === 0 ? 'Les copies « sans visage » ne sont pas récupérables' : ''}>
+            {restoring ? <span className="loading" /> : null} Récupérer la sélection ({restorableCount})
+          </button>
+        )}
+        <button type="button" className="btn-primary" onClick={onNext}>
+          Passer à la vidéo →
+        </button>
+      </div>
+
       <div id="review-panel" role="tabpanel" aria-labelledby={activeTab === 'validated' ? 'tab-validated' : 'tab-rejected'}>
       {files.length === 0 ? (
         <div className="empty-state">
@@ -420,18 +462,19 @@ export function ReviewStep({ onNext }: Props) {
             onKeyDownCapture={handleGridKeyDown}
           >
             <div className="card-grid">
-              {files.map((f, index) => {
+              {displayedFiles.map((f, i) => {
+                const globalIndex = i;
                 const reason = activeTab === 'rejected' ? getRejectReasonFromFilename(f) : null;
                 return (
                   <button
                     key={f}
                     type="button"
                     data-filename={f}
-                    data-index={index}
+                    data-index={globalIndex}
                     tabIndex={0}
                     className={`thumb-card clickable ${marked.has(f) ? 'marked' : ''}`}
-                    onDoubleClick={() => openLightbox(index)}
-                    onKeyDown={(e) => handleCardKeyDown(e, index)}
+                    onDoubleClick={() => openLightbox(globalIndex)}
+                    onKeyDown={(e) => handleCardKeyDown(e, globalIndex)}
                   >
                     {activeTab === 'rejected' && reason && (
                       <span className={`thumb-badge reason-${reason}`} title={REJECT_REASON_LABELS[reason]}>
@@ -464,6 +507,13 @@ export function ReviewStep({ onNext }: Props) {
               );
             })()}
           </div>
+
+          {hasMore && <div ref={sentinelRef} className="infinite-scroll-sentinel" aria-hidden="true" />}
+          {hasMore && (
+            <p className="muted infinite-scroll-hint">
+              Défilez pour charger plus ({displayedFiles.length} affichées sur {files.length})…
+            </p>
+          )}
 
           {lightboxOpen && files.length > 0 && lightboxIndex >= 0 && lightboxIndex < files.length && (
             <div

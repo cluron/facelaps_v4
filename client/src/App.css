@@ -113,33 +113,37 @@
   margin-top: 1.25rem;
 }
 
-.review-tabs {
+/* Onglets internes (Vérification Validés/Rejetés, Vidéo Génération/Concaténation) — même style que la nav d’étapes */
+.content-tabs {
   display: flex;
   gap: 0.25rem;
+  flex-wrap: wrap;
   margin-bottom: 1rem;
-  border-bottom: 1px solid var(--border);
 }
 
-.review-tab {
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
+.content-tab {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.875rem;
+  background: var(--surface);
   color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   cursor: pointer;
-  border-radius: var(--radius) var(--radius) 0 0;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 
-.review-tab:hover {
+.content-tab:hover {
   color: var(--text);
+  border-color: var(--muted);
+  background: var(--bg-subtle);
 }
 
-.review-tab.active {
-  color: var(--text);
-  font-weight: 600;
-  border-bottom-color: var(--primary);
+.content-tab.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
 }
 
 .toolbar {
@@ -155,6 +159,45 @@
   height: 1.25rem;
   background: var(--border);
   margin: 0 0.25rem;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--border);
+  margin-top: 0.25rem;
+}
+
+.pagination-range {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.pagination-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.pagination-page {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.infinite-scroll-sentinel {
+  height: 1px;
+  width: 100%;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.infinite-scroll-hint {
+  font-size: 0.9rem;
+  margin: 0.25rem 0 0;
 }
 
 /* Filtres par motif de rejet (onglet Rejetés) */
@@ -647,6 +690,13 @@
   margin-top: 1.25rem;
 }
 
+.actions.actions-top {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
 .actions-hint {
   width: 100%;
   margin: 0.25rem 0 0 !important;
@@ -885,6 +935,14 @@
   margin-bottom: 1.25rem;
 }
 
+.video-panel {
+  margin-top: 0.25rem;
+}
+
+.video-panel .block-desc {
+  margin-bottom: 1rem;
+}
+
 .video-block {
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -907,6 +965,16 @@
 
 .form-row-video {
   margin-bottom: 0.75rem;
+}
+
+.form-hint {
+  font-size: 0.875rem;
+  margin-top: 0.25rem;
+  flex-basis: 100%;
+}
+
+.video-sort-select {
+  min-width: 16rem;
 }
 
 .video-success a {
