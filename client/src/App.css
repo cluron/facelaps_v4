@@ -370,6 +370,23 @@
   background: #7c3aed; /* violet — rejet manuel */
 }
 
+/* Indicateur qualité (point coloré, onglet Validés) */
+.thumb-quality-dot {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  border: 1.5px solid rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.quality-green  { background: #22c55e; }
+.quality-yellow { background: #f59e0b; }
+.quality-red    { background: #ef4444; }
+
 .thumb-delete {
   position: absolute;
   top: 0.35rem;

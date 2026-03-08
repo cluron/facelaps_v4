@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type Props = { onNext: () => void };
 
@@ -56,6 +56,8 @@ export function ReviewStep({ onNext }: Props) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [qualityScores, setQualityScores] = useState<Record<string, number>>({});
+  const [sortMode, setSortMode] = useState<'default' | 'quality_asc' | 'quality_desc'>('default');
   const startRef = useRef<{ x: number; y: number } | null>(null);
   const isSelectingRef = useRef(false);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -66,7 +68,31 @@ export function ReviewStep({ onNext }: Props) {
       ? rejectedFiles.filter((f) => getRejectReasonFromFilename(f) === filterRejectReason)
       : rejectedFiles;
 
-  const files = activeTab === 'validated' ? validatedFiles : filteredRejectedFiles;
+  const sortedValidatedFiles = useMemo(() => {
+    if (sortMode === 'default') return validatedFiles;
+    return [...validatedFiles].sort((a, b) => {
+      const qa = qualityScores[a] ?? -1;
+      const qb = qualityScores[b] ?? -1;
+      return sortMode === 'quality_asc' ? qa - qb : qb - qa;
+    });
+  }, [validatedFiles, qualityScores, sortMode]);
+
+  const files = activeTab === 'validated' ? sortedValidatedFiles : filteredRejectedFiles;
+
+  const hasQualityScores = validatedFiles.some((f) => qualityScores[f] != null);
+
+  /** Seuils relatifs (P25 / P75) calculés sur les fichiers validés ayant un score. */
+  const qualityThresholds = useMemo(() => {
+    const values = validatedFiles
+      .map((f) => qualityScores[f])
+      .filter((v): v is number => v != null)
+      .sort((a, b) => a - b);
+    if (values.length < 3) return null;
+    return {
+      p25: values[Math.floor(values.length * 0.25)],
+      p75: values[Math.floor(values.length * 0.75)],
+    };
+  }, [validatedFiles, qualityScores]);
 
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
@@ -111,12 +137,14 @@ export function ReviewStep({ onNext }: Props) {
     return Promise.all([
       fetch('/api/folders/validated').then(safeJson).catch(() => ({ files: [] })),
       fetch('/api/folders/rejected').then(safeJson).catch(() => ({ files: [] })),
+      fetch('/api/quality-scores').then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
     ])
-      .then(([validatedData, rejectedData]) => {
+      .then(([validatedData, rejectedData, scores]) => {
         const validated = validatedData?.files ?? [];
         const rejected = rejectedData?.files ?? [];
         setValidatedFiles(validated);
         setRejectedFiles(rejected);
+        setQualityScores(scores ?? {});
         setMarked(new Set());
         setLoading(false);
         return { validatedFiles: validated, rejectedFiles: rejected };
@@ -393,6 +421,35 @@ export function ReviewStep({ onNext }: Props) {
       </div>
 
       <div className="toolbar">
+        {activeTab === 'validated' && hasQualityScores && (
+          <>
+            <div className="reject-filters">
+              <span className="reject-filters-label">Tri :</span>
+              <button
+                type="button"
+                className={`reject-filter-btn ${sortMode === 'default' ? 'active' : ''}`}
+                onClick={() => setSortMode('default')}
+              >
+                Par nom
+              </button>
+              <button
+                type="button"
+                className={`reject-filter-btn ${sortMode === 'quality_asc' ? 'active' : ''}`}
+                onClick={() => setSortMode('quality_asc')}
+              >
+                Moins bonnes en premier
+              </button>
+              <button
+                type="button"
+                className={`reject-filter-btn ${sortMode === 'quality_desc' ? 'active' : ''}`}
+                onClick={() => setSortMode('quality_desc')}
+              >
+                Meilleures en premier
+              </button>
+            </div>
+            <span className="toolbar-sep" aria-hidden />
+          </>
+        )}
         {activeTab === 'rejected' && rejectedFiles.length > 0 && (
           <>
             <div className="reject-filters">
@@ -466,6 +523,15 @@ export function ReviewStep({ onNext }: Props) {
               {displayedFiles.map((f, i) => {
                 const globalIndex = i;
                 const reason = activeTab === 'rejected' ? getRejectReasonFromFilename(f) : null;
+                const variance = activeTab === 'validated' ? qualityScores[f] : undefined;
+                const qualityClass = variance == null || !qualityThresholds ? null
+                  : variance >= qualityThresholds.p75 ? 'quality-green'
+                  : variance >= qualityThresholds.p25 ? 'quality-yellow'
+                  : 'quality-red';
+                const qualityLabel = variance == null || !qualityThresholds ? null
+                  : variance >= qualityThresholds.p75 ? 'Bonne qualité (top 25 %)'
+                  : variance >= qualityThresholds.p25 ? 'Qualité acceptable'
+                  : 'Qualité médiocre (bottom 25 %)';
                 return (
                   <button
                     key={f}
@@ -481,6 +547,9 @@ export function ReviewStep({ onNext }: Props) {
                       <span className={`thumb-badge reason-${reason}`} title={REJECT_REASON_LABELS[reason]}>
                         {REJECT_REASON_LABELS[reason]}
                       </span>
+                    )}
+                    {qualityClass && (
+                      <span className={`thumb-quality-dot ${qualityClass}`} title={qualityLabel ?? ''} aria-label={qualityLabel ?? ''} />
                     )}
                     <img
                       src={`/files/${activeTab}/${encodeURIComponent(f)}`}

@@ -220,7 +220,7 @@ export type ExtractResult =
   | { ok: true; path: string; similarity: number }
   | { ok: false; path: string; reason: RejectReason };
 
-export type ValidatedFile = { name: string; blob: Blob; sourceName: string };
+export type ValidatedFile = { name: string; blob: Blob; sourceName: string; blurVariance?: number };
 
 /** Rejet avec motif (encodé dans le nom du fichier en 2_rejected pour étiquettes et filtres). */
 export type RejectedItem = { sourceName: string; blob?: Blob; reason: RejectReason };
@@ -326,7 +326,7 @@ export async function extractInBrowser(
       }
 
       const outName = name.replace(/\.[a-z]+$/i, '.jpg');
-      validated.push({ name: outName, blob, sourceName: name });
+      validated.push({ name: outName, blob, sourceName: name, blurVariance });
       const r: ExtractResult = { ok: true, path: outName, similarity: bestSimilarity };
       results.push(r);
       onItemDone?.(r);

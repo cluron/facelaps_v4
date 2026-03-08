@@ -71,7 +71,11 @@ export function ExtractStep({ onNext }: Props) {
 
       setProgress('Envoi des résultats au serveur…');
       const form = new FormData();
-      validated.forEach(({ name, blob }) => form.append('validated', blob, name));
+      const qualityScores: Record<string, number> = {};
+      validated.forEach(({ name, blob, blurVariance }) => {
+        form.append('validated', blob, name);
+        if (blurVariance != null) qualityScores[name] = blurVariance;
+      });
       const rejectedCopyFromInput = rejected.filter((r) => !r.blob).map((r) => ({ sourceName: r.sourceName, reason: r.reason }));
       rejected.filter((r) => r.blob).forEach((r) => {
         const outName = r.sourceName.replace(/\.[a-z]+$/i, '.jpg');
@@ -79,6 +83,7 @@ export function ExtractStep({ onNext }: Props) {
       });
       form.append('rejected', JSON.stringify(rejectedCopyFromInput));
       form.append('validatedSourceNames', JSON.stringify(validated.map((v) => v.sourceName)));
+      form.append('qualityScores', JSON.stringify(qualityScores));
 
       const completeRes = await fetch('/api/extract/complete', { method: 'POST', body: form });
       let completeData: { error?: string; validated?: string[] } = {};

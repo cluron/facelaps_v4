@@ -46,7 +46,7 @@ router.post('/upload/:folder', (req: Request, res: Response, next: NextFunction)
   res.status(400).json({ error: err?.message ?? 'Erreur upload' });
 });
 
-/** Supprimer des fichiers d’un dossier (body: { folder, files: string[] }). */
+/** Supprimer des fichiers d'un dossier (body: { folder, files: string[] }). */
 router.post('/delete', (req, res) => {
   const { folder, files: fileList } = req.body as { folder?: string; files?: string[] };
   if (!folder || !Array.isArray(fileList) || fileList.length === 0) {
@@ -69,7 +69,7 @@ router.post('/delete', (req, res) => {
   res.json({ deleted });
 });
 
-/** Liste les fichiers d’un dossier du pipeline. */
+/** Liste les fichiers d'un dossier du pipeline. */
 router.get('/folders/:name', (req, res) => {
   const name = req.params.name as keyof typeof PATHS.dirs;
   if (!(name in PATHS.dirs)) return res.status(400).json({ error: 'Dossier invalide' });
@@ -81,8 +81,19 @@ router.get('/folders/:name', (req, res) => {
   res.json({ path: d, files });
 });
 
+/** Scores de qualité (variance Laplacien) des images validées, sauvegardés lors de l'extraction. */
+router.get('/quality-scores', (_req, res) => {
+  const scoresPath = path.join(dir('validated'), '.quality_scores.json');
+  if (!fs.existsSync(scoresPath)) return res.json({});
+  try {
+    res.json(JSON.parse(fs.readFileSync(scoresPath, 'utf8')));
+  } catch (_) {
+    res.json({});
+  }
+});
+
 /**
- * Finalise l’extraction côté client : reçoit les visages validés, les crops rejetés (pose/qualité), et la liste des rejetés sans crop (no_face/no_match) à copier en input_xxx.
+ * Finalise l'extraction côté client : reçoit les visages validés, les crops rejetés (pose/qualité), et la liste des rejetés sans crop (no_face/no_match) à copier en input_xxx.
  * Body: FormData avec "validated", "rejectedCrop" (fichiers image = visages extraits rejetés), "rejected" (JSON array de noms input à copier en input_xxx).
  */
 router.post('/extract/complete', (req: Request, res: Response, next: NextFunction) => {
@@ -128,6 +139,20 @@ router.post('/extract/complete', (req: Request, res: Response, next: NextFunctio
         written.push(base);
       } catch (_) {}
     }
+    // Sauvegarde des scores de qualité (variance Laplacien) dans .quality_scores.json
+    const qualityScoresRaw = (req as any).body?.qualityScores;
+    if (typeof qualityScoresRaw === 'string' && qualityScoresRaw.length > 2) {
+      try {
+        const incoming: Record<string, number> = JSON.parse(qualityScoresRaw);
+        const scoresPath = path.join(validatedDir, '.quality_scores.json');
+        let existing: Record<string, number> = {};
+        try {
+          if (fs.existsSync(scoresPath)) existing = JSON.parse(fs.readFileSync(scoresPath, 'utf8'));
+        } catch (_) {}
+        Object.assign(existing, incoming);
+        fs.writeFileSync(scoresPath, JSON.stringify(existing), 'utf8');
+      } catch (_) {}
+    }
     // Crops rejetés (visage tourné / qualité) : même format que validés, en 2_rejected.
     for (const f of rejectedCropFiles) {
       const base = path.basename(f.originalname || 'image.jpg').replace(/\.[a-z]+$/i, '.jpg');
@@ -136,7 +161,7 @@ router.post('/extract/complete', (req: Request, res: Response, next: NextFunctio
         fs.writeFileSync(path.join(rejectedDir, base), f.buffer);
       } catch (_) {}
     }
-    // Rejetés sans crop (no_face, no_match) : copie de l’original en input_xxx pour référence (non récupérable).
+    // Rejetés sans crop (no_face, no_match) : copie de l'original en input_xxx pour référence (non récupérable).
     for (const { sourceName, reason } of rejectedCopyFromInput) {
       const base = path.basename(sourceName);
       if (base.includes('..')) continue;
